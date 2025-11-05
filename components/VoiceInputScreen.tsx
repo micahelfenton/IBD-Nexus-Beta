@@ -28,47 +28,97 @@ interface LiveSession {
 
 const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTranscription, onCancel }) => {
   const [isListening, setIsListening] = useState(false);
+  const [isSilent, setIsSilent] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+
   const sessionRef = useRef<LiveSession | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const silenceTimerRef = useRef<number | null>(null);
+  
+  // Refs for performance optimization: buffer transcription updates and batch them.
+  const transcriptionBufferRef = useRef<string>('');
+  const animationFrameRef = useRef<number | null>(null);
 
-  const stopListening = useCallback(() => {
-    if (!isListening) return;
-
+  const cleanup = useCallback(() => {
     setIsListening(false);
-    
-    if(sessionRef.current) {
-      sessionRef.current.close();
-      sessionRef.current = null;
+    setIsSilent(false);
+
+    // Cancel any pending animation frame to prevent state updates after cleanup
+    if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
     }
-    
-    if(streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
+    transcriptionBufferRef.current = '';
+
+    if (sessionRef.current) {
+        sessionRef.current.close();
+        sessionRef.current = null;
     }
-    if(processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
     }
-    if(sourceRef.current) {
+    if (gainNodeRef.current) {
+        gainNodeRef.current.disconnect();
+        gainNodeRef.current = null;
+    }
+    if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+    }
+    if (sourceRef.current) {
         sourceRef.current.disconnect();
         sourceRef.current = null;
     }
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
+        audioContextRef.current.close().catch(console.error);
+        audioContextRef.current = null;
     }
-  }, [isListening]);
+    if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+    }
+  }, []);
 
+  const flushTranscriptionBuffer = useCallback(() => {
+    if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+    }
+    const bufferedText = transcriptionBufferRef.current;
+    if (bufferedText.length > 0) {
+        transcriptionBufferRef.current = '';
+        setText(prev => {
+            if (prev.endsWith(' ') || prev.length === 0 || bufferedText.startsWith(' ')) {
+                return prev + bufferedText;
+            }
+            return prev + ' ' + bufferedText;
+        });
+    }
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (isListening) {
+      // First, ensure any buffered text is displayed
+      flushTranscriptionBuffer();
+      // Then, clean up all resources
+      cleanup();
+    }
+  }, [isListening, cleanup, flushTranscriptionBuffer]);
 
   const startListening = async () => {
     if (isListening) return;
+    
+    // Reset state from any previous attempt
+    setText('');
     setError(null);
     setIsListening(true);
+    setIsSilent(false);
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
@@ -83,8 +133,6 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
         callbacks: {
           onopen: () => {
             console.log('Live session opened.');
-            // FIX: Add a guard to ensure audio context is still active when the callback fires.
-            // This prevents a race condition if the user stops listening before the connection is established.
             if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
                 console.warn("AudioContext closed before live session could open. Aborting setup.");
                 sessionPromise.then(session => session.close());
@@ -92,9 +140,35 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
             }
             sourceRef.current = audioContextRef.current!.createMediaStreamSource(stream);
             processorRef.current = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+            gainNodeRef.current = audioContextRef.current!.createGain();
+            gainNodeRef.current.gain.value = 0; // Mute output to prevent feedback
             
             processorRef.current.onaudioprocess = (audioProcessingEvent) => {
               const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+
+              // --- Silence Detection Logic ---
+              let sum = 0.0;
+              for (let i = 0; i < inputData.length; i++) {
+                sum += inputData[i] * inputData[i];
+              }
+              const rms = Math.sqrt(sum / inputData.length);
+              const SILENCE_THRESHOLD = 0.01; // May need tuning
+
+              if (rms < SILENCE_THRESHOLD) {
+                if (silenceTimerRef.current === null) {
+                  silenceTimerRef.current = window.setTimeout(() => {
+                    setIsSilent(true);
+                  }, 3000); // 3 seconds of silence triggers the message
+                }
+              } else {
+                setIsSilent(false);
+                if (silenceTimerRef.current !== null) {
+                  clearTimeout(silenceTimerRef.current);
+                  silenceTimerRef.current = null;
+                }
+              }
+
+              // --- Audio Processing and Sending ---
               const l = inputData.length;
               const int16 = new Int16Array(l);
               for (let i = 0; i < l; i++) {
@@ -110,24 +184,42 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
             };
             
             sourceRef.current.connect(processorRef.current);
-            processorRef.current.connect(audioContextRef.current!.destination);
+            processorRef.current.connect(gainNodeRef.current);
+            gainNodeRef.current.connect(audioContextRef.current!.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
               const newText = message.serverContent.inputTranscription.text;
-              setText(prev => (prev.endsWith(' ') || prev.length === 0) ? prev + newText : prev + ' ' + newText);
+              transcriptionBufferRef.current += newText;
+
+              // Use requestAnimationFrame to batch updates and sync with browser repaint
+              if (animationFrameRef.current === null) {
+                animationFrameRef.current = requestAnimationFrame(() => {
+                  const bufferedText = transcriptionBufferRef.current;
+                  if (bufferedText.length > 0) {
+                      transcriptionBufferRef.current = ''; // Clear buffer before setting state
+                      setText(prev => {
+                        // Combine the previous text with the buffered updates
+                        if (prev.endsWith(' ') || prev.length === 0 || bufferedText.startsWith(' ')) {
+                            return prev + bufferedText;
+                        }
+                        return prev + ' ' + bufferedText;
+                      });
+                  }
+                  animationFrameRef.current = null;
+                });
+              }
             }
           },
           onerror: (e: ErrorEvent) => {
             console.error('Live session error:', e);
             setError('An error occurred during recording.');
-            stopListening();
+            cleanup();
           },
           onclose: (e: CloseEvent) => {
             console.log('Live session closed.');
-            if (isListening) {
-                setIsListening(false);
-            }
+            // Cleanup is called to ensure resources are released, even if closed unexpectedly.
+            cleanup();
           },
         },
         config: {
@@ -144,14 +236,12 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
     } catch (error) {
       console.error('Failed to start listening:', error);
       setError('Could not access the microphone.');
-      setIsListening(false);
+      cleanup();
     }
   };
   
   const handleAnalyze = () => {
-      if (isListening) {
-          stopListening();
-      }
+      stopListening();
       if (text.trim().length === 0) {
           setError("Please provide some input before analyzing.");
           return;
@@ -162,25 +252,27 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
   
   // Ensure cleanup on unmount
   useEffect(() => {
-    return () => {
-        if(sessionRef.current) {
-            sessionRef.current.close();
-        }
-         if(streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-        }
+    return cleanup;
+  }, [cleanup]);
+
+  const getPromptText = () => {
+    if (error) return <span className="text-red-400">{error}</span>;
+    if (isListening) {
+      if (isSilent) return "I can't hear you clearly. Please speak up, move to a quieter place, or type your entry.";
+      return "I'm listening. Speak naturally about your day...";
     }
-  }, []);
+    return "Tap the icon to start speaking, or type your entry below.";
+  };
 
   return (
     <div className="flex flex-col items-center justify-between h-full p-4 sm:p-8 text-center bg-gradient-to-br from-slate-900 to-slate-800">
       <div className="w-full h-10">
-        {/* Placeholder for header area to maintain layout consistency */}
+        <button onClick={onCancel} className="float-right text-slate-400 hover:text-white transition-colors p-2">Cancel</button>
       </div>
       <div className="flex-grow flex flex-col items-center justify-center w-full -mt-10">
         <h1 className="text-3xl font-bold text-cyan-300 mb-2">New Entry</h1>
         <p className="text-slate-400 max-w-sm h-10">
-          {error ? <span className="text-red-400">{error}</span> : isListening ? "I'm listening. Speak naturally about your day..." : "tap the icon below to speak or if you would rather type tap into the box"}
+          {getPromptText()}
         </p>
         <textarea 
             className="mt-8 p-4 bg-slate-900/50 rounded-lg min-h-[120px] w-full max-w-md text-slate-300 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-shadow"
@@ -191,10 +283,10 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
       </div>
 
       <div className="relative flex items-center justify-center">
-        {isListening && (
+        {isListening && !isSilent && (
             <div className="absolute w-48 h-48 rounded-full bg-cyan-500/10 animate-ping"></div>
         )}
-         {isListening && (
+         {isListening && !isSilent && (
             <div className="absolute w-32 h-32 rounded-full bg-cyan-500/20 animate-pulse"></div>
         )}
         <button
