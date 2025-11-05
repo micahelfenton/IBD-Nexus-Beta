@@ -3,6 +3,7 @@ export enum AppScreen {
   DASHBOARD,
   JOURNAL_VIEW,
   DIET,
+  TREND_ANALYSIS,
 }
 
 export interface JournalSummary {
@@ -39,6 +40,28 @@ export interface JournalEntry {
   imageUrl?: string;
   imageAnalysis?: ImageAnalysisResult;
 }
+
+export interface TrendAnalysisResult {
+  riskTrend: {
+    metric: "FlareUpRisk";
+    changePercent: number;
+    timeframe: string;
+  };
+  wellnessTrend: {
+    metric: "MentalWellnessScore";
+    changePercent: number;
+    timeframe: string;
+  };
+  correlationInsights: {
+    highRiskFoodTrigger: string;
+    highRiskMoodTrigger: string;
+  };
+  stoolPattern: {
+    mostFrequentType: string;
+    bloodInStoolCount: number;
+  };
+}
+
 
 // The flow for creating a new entry
 export enum NewEntryState {

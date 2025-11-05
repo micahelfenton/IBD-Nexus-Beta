@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { JournalSummary, ImageAnalysisResult } from '../types';
+import { JournalSummary, ImageAnalysisResult, TrendAnalysisResult } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -162,5 +162,78 @@ export async function analyzeStoolImage(base64Image: string): Promise<ImageAnaly
     } catch (error) {
         console.error('Error analyzing image:', error);
         return { redDetections: [], brownDetections: [] };
+    }
+}
+
+const trendAnalysisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        riskTrend: {
+            type: Type.OBJECT,
+            properties: {
+                metric: { type: Type.STRING },
+                changePercent: { type: Type.NUMBER },
+                timeframe: { type: Type.STRING }
+            }
+        },
+        wellnessTrend: {
+            type: Type.OBJECT,
+            properties: {
+                metric: { type: Type.STRING },
+                changePercent: { type: Type.NUMBER },
+                timeframe: { type: Type.STRING }
+            }
+        },
+        correlationInsights: {
+            type: Type.OBJECT,
+            properties: {
+                highRiskFoodTrigger: { type: Type.STRING },
+                highRiskMoodTrigger: { type: Type.STRING }
+            }
+        },
+        stoolPattern: {
+            type: Type.OBJECT,
+            properties: {
+                mostFrequentType: { type: Type.STRING },
+                bloodInStoolCount: { type: Type.NUMBER }
+            }
+        }
+    },
+    required: ['riskTrend', 'wellnessTrend', 'correlationInsights', 'stoolPattern']
+};
+
+export async function generateTrendAnalysis(entries: JournalSummary[]): Promise<TrendAnalysisResult> {
+    const prompt = `
+        You are a data analyst for a health application. Based on the following array of journal entry summary objects, perform these analysis tasks:
+        1.  **Trend Score:** Calculate the percentage change in 'flareUpRisk' and 'mentalWellnessScore' from the earliest entry to the most recent entry.
+        2.  **Symptom Correlation:** Identify the single most common food ('foodEaten') and single most common mood ('moods') that appear in entries where 'flareUpRisk' is 80 or higher.
+        3.  **Stool Pattern:** State the most frequent 'stoolType' across all entries and the total count of entries where 'bloodInStool' was true.
+
+        Return ONLY a single, valid JSON object that adheres strictly to the provided schema. The timeframe for trends should be "Last 30 Days".
+
+        DATA:
+        ${JSON.stringify(entries, null, 2)}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: trendAnalysisSchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as TrendAnalysisResult;
+    } catch (error) {
+        console.error('Error generating trend analysis:', error);
+        // Provide a fallback structure in case of an error
+        return {
+            riskTrend: { metric: "FlareUpRisk", changePercent: 0, timeframe: "Last 30 Days" },
+            wellnessTrend: { metric: "MentalWellnessScore", changePercent: 0, timeframe: "Last 30 Days" },
+            correlationInsights: { highRiskFoodTrigger: "N/A", highRiskMoodTrigger: "N/A" },
+            stoolPattern: { mostFrequentType: "N/A", bloodInStoolCount: 0 }
+        };
     }
 }

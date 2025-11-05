@@ -5,6 +5,7 @@ import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon } from './icon
 interface DashboardScreenProps {
   journalEntries: JournalEntry[];
   onNavigateToDiet: () => void;
+  onNavigateToTrendAnalysis: () => void;
 }
 
 interface FoodStat {
@@ -123,7 +124,7 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
     );
 };
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis }) => {
     const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
 
     const filteredEntries = useMemo(() => {
@@ -175,14 +176,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
             highCrampsDays: highCrampsDays,
         };
     }, [filteredEntries]);
-
-    const getOutlook = () => {
-        const baseChance = 70;
-        if (wellnessTrend === 1) return `Trend is positive. ${baseChance + 15}% chance of stable health.`;
-        if (wellnessTrend === -1) return `Trend is negative. ${baseChance - 20}% chance of stable health.`;
-        return `Trends are stable. ${baseChance}% chance of continued stability.`;
-    };
-
 
     return (
         <div className="p-4 sm:p-6 pb-24 text-white overflow-y-auto h-full">
@@ -236,10 +229,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
 
                     <DietInsightCard journalEntries={journalEntries} onClick={onNavigateToDiet} />
                     
-                    <div className="bg-slate-800/50 rounded-lg p-4">
-                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><CrystalBallIcon className="w-5 h-5 text-cyan-400" />30-Day Outlook</h2>
-                        <p className="text-slate-400 text-sm">{getOutlook()}</p>
-                        <div className="mt-3 text-xs text-slate-500">Based on {timePeriod === '7d' ? '7-day' : '30-day'} wellness trends.</div>
+                    <div onClick={onNavigateToTrendAnalysis} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors">
+                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><CrystalBallIcon className="w-5 h-5 text-cyan-400" />Trend Analysis</h2>
+                        <p className="text-slate-400 text-sm">Get AI-powered insights on your flare-up risk, wellness trends, and symptom triggers.</p>
+                         <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">View Analysis &rarr;</p>
                     </div>
 
                     <div className="bg-slate-800/50 rounded-lg p-4">

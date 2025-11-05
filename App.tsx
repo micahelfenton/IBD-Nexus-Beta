@@ -4,6 +4,7 @@ import SummaryScreen from './components/SummaryScreen';
 import DashboardScreen from './components/DashboardScreen';
 import JournalView from './components/JournalView';
 import DietScreen from './components/DietScreen';
+import TrendAnalysisScreen from './components/TrendAnalysisScreen';
 import { AppScreen, NewEntryState, JournalEntry, JournalSummary, ImageAnalysisResult } from './types';
 import { generateSummary, analyzeStoolImage } from './services/geminiService';
 import { DashboardIcon, JournalIcon, PlusIcon } from './components/icons';
@@ -157,13 +158,23 @@ function App() {
     // Otherwise, show the active screen
     switch (activeScreen) {
         case AppScreen.DASHBOARD:
-            return <DashboardScreen journalEntries={journalEntries} onNavigateToDiet={() => setActiveScreen(AppScreen.DIET)} />;
+            return <DashboardScreen 
+                        journalEntries={journalEntries} 
+                        onNavigateToDiet={() => setActiveScreen(AppScreen.DIET)} 
+                        onNavigateToTrendAnalysis={() => setActiveScreen(AppScreen.TREND_ANALYSIS)}
+                    />;
         case AppScreen.JOURNAL_VIEW:
             return <JournalView journalEntries={journalEntries} onAttachImage={handleAttachImageToEntry} />;
         case AppScreen.DIET:
             return <DietScreen journalEntries={journalEntries} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
+        case AppScreen.TREND_ANALYSIS:
+            return <TrendAnalysisScreen journalEntries={journalEntries} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
         default:
-            return <DashboardScreen journalEntries={journalEntries} onNavigateToDiet={() => setActiveScreen(AppScreen.DIET)} />;
+            return <DashboardScreen 
+                        journalEntries={journalEntries} 
+                        onNavigateToDiet={() => setActiveScreen(AppScreen.DIET)}
+                        onNavigateToTrendAnalysis={() => setActiveScreen(AppScreen.TREND_ANALYSIS)}
+                    />;
     }
   }
 
