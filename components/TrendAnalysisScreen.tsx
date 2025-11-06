@@ -26,20 +26,27 @@ const ErrorDisplay = ({ onRetry }: { onRetry: () => void }) => (
 );
 
 const TrendCard: React.FC<{ title: string; value: number; metric: string }> = ({ title, value, metric }) => {
-    const isPositive = (metric === 'Wellness' && value > 0) || (metric === 'Risk' && value < 0);
-    const isNegative = (metric === 'Wellness' && value < 0) || (metric === 'Risk' && value > 0);
+    // Determine the implication of the change (good, bad, or neutral)
+    const isGood = (metric === 'Wellness' && value > 0) || (metric === 'Risk' && value < 0);
+    const isBad = (metric === 'Wellness' && value < 0) || (metric === 'Risk' && value > 0);
     const isNeutral = value === 0;
 
-    const color = isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-yellow-400';
-    const icon = isPositive ? <ArrowUpIcon className="w-5 h-5" /> : isNegative ? <ArrowDownIcon className="w-5 h-5" /> : null;
-    const text = isPositive ? 'Improvement' : isNegative ? (metric === 'Risk' ? 'Increase' : 'Decline') : 'Stable';
+    // Set color and text based on the implication
+    const color = isGood ? 'text-green-400' : isBad ? 'text-red-400' : 'text-yellow-400';
+    const text = isGood ? 'Improvement' : isBad ? (metric === 'Risk' ? 'Increase' : 'Decline') : 'Stable';
+
+    // Set the icon based on the numerical direction of the change
+    const icon = value > 0 ? <ArrowUpIcon className="w-5 h-5" /> : value < 0 ? <ArrowDownIcon className="w-5 h-5" /> : null;
+    
+    // Display the absolute value of the percentage change, rounded to one decimal place.
+    const formattedValue = parseFloat(Math.abs(value).toFixed(1));
 
     return (
         <div className="bg-slate-800/50 rounded-lg p-4 text-center">
             <h3 className="text-sm font-semibold text-slate-400">{title}</h3>
             <div className={`my-2 text-4xl font-bold flex items-center justify-center gap-2 ${color}`}>
                 {icon}
-                <span>{value}%</span>
+                <span>{formattedValue}%</span>
             </div>
             <p className={`text-xs font-semibold ${color}`}>{text} over 30 days</p>
         </div>

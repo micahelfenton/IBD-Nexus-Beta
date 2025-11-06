@@ -36,7 +36,7 @@ const responseSchema = {
     foodEaten: {
         type: Type.ARRAY,
         items: { type: Type.STRING },
-        description: 'A list of specific foods or meals the user mentioned eating.'
+        description: 'A list of ALL individual food items, ingredients, drinks, and spices mentioned (e.g., "coffee", "cinnamon", "toast", "avocado"). Break down meals into components.'
     },
     exercise: {
         type: Type.ARRAY,
@@ -71,7 +71,11 @@ export async function generateSummary(transcription: string): Promise<JournalSum
   try {
      const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `You are an empathetic health assistant. Analyze this voice journal entry to extract key wellness information. Focus on physical symptoms (IBD-related if mentioned), emotional state, stress levels, diet, and exercise. Pay special attention to descriptions of stool, including type (diarrhea, soft, normal, hard), color, presence of blood, and any mention of cramps (rate severity 0-10).
+      contents: `You are an empathetic health assistant. Analyze this voice journal entry to extract key wellness information. Focus on physical symptoms (IBD-related if mentioned), emotional state, stress levels, diet, and exercise.
+      
+      When extracting diet information, be very granular. List all individual food items, ingredients (like spices or condiments), and drinks mentioned. For example, if the user says "I had a chicken salad with ranch dressing and a coke", you should extract "chicken", "salad", "ranch dressing", and "coke".
+      
+      Pay special attention to descriptions of stool, including type (diarrhea, soft, normal, hard), color, presence of blood, and any mention of cramps (rate severity 0-10).
       
       Transcription: "${transcription}"
       
