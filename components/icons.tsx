@@ -166,3 +166,17 @@ export const ArrowDownIcon: React.FC<IconProps> = (props) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
   </svg>
 );
+
+export const SpeakingHeadIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" {...props}>
+        {/* Microphone */}
+        <rect x="10" y="3" width="4" height="8" rx="2" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v5M10 16h4" />
+        {/* Left waves */}
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 6v4" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 7v2" opacity="0.6" />
+        {/* Right waves */}
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 6v4" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7v2" opacity="0.6" />
+    </svg>
+);

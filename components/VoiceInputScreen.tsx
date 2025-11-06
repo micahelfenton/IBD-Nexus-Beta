@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 // The type for the live session object is not exported from the library.
 // A local interface is defined below based on its usage.
 import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
-import { ChatBubbleBottomCenterTextIcon, StopIcon } from './icons';
+import { SpeakingHeadIcon, StopIcon } from './icons';
 
 interface NewEntryScreenProps {
   setAppState: () => void;
@@ -294,7 +294,7 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
           className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ease-in-out text-white shadow-lg ${isListening ? 'bg-red-500 hover:bg-red-400 shadow-red-500/30' : 'bg-cyan-500 hover:bg-cyan-400 shadow-cyan-500/30'}`}
           aria-label={isListening ? "Stop recording" : "Start recording"}
         >
-          {isListening ? <StopIcon className="w-10 h-10" /> : <ChatBubbleBottomCenterTextIcon className="w-12 h-12" />}
+          {isListening ? <StopIcon className="w-10 h-10" /> : <SpeakingHeadIcon className="w-12 h-12" />}
         </button>
       </div>
 
