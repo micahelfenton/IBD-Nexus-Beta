@@ -177,16 +177,22 @@ const trendAnalysisSchema = {
             properties: {
                 metric: { type: Type.STRING },
                 changePercent: { type: Type.NUMBER },
-                timeframe: { type: Type.STRING }
-            }
+                timeframe: { type: Type.STRING },
+                startValue: { type: Type.NUMBER, description: "The flareUpRisk value from the earliest entry." },
+                endValue: { type: Type.NUMBER, description: "The flareUpRisk value from the most recent entry." }
+            },
+            required: ["metric", "changePercent", "timeframe", "startValue", "endValue"]
         },
         wellnessTrend: {
             type: Type.OBJECT,
             properties: {
                 metric: { type: Type.STRING },
                 changePercent: { type: Type.NUMBER },
-                timeframe: { type: Type.STRING }
-            }
+                timeframe: { type: Type.STRING },
+                startValue: { type: Type.NUMBER, description: "The mentalWellnessScore value from the earliest entry." },
+                endValue: { type: Type.NUMBER, description: "The mentalWellnessScore value from the most recent entry." }
+            },
+            required: ["metric", "changePercent", "timeframe", "startValue", "endValue"]
         },
         correlationInsights: {
             type: Type.OBJECT,
@@ -201,17 +207,22 @@ const trendAnalysisSchema = {
                 mostFrequentType: { type: Type.STRING },
                 bloodInStoolCount: { type: Type.NUMBER }
             }
+        },
+        overallInterpretation: {
+            type: Type.STRING,
+            description: "A single, non-technical sentence summarizing the overall trend for the user."
         }
     },
-    required: ['riskTrend', 'wellnessTrend', 'correlationInsights', 'stoolPattern']
+    required: ['riskTrend', 'wellnessTrend', 'correlationInsights', 'stoolPattern', 'overallInterpretation']
 };
 
 export async function generateTrendAnalysis(entries: JournalSummary[]): Promise<TrendAnalysisResult> {
     const prompt = `
         You are a data analyst for a health application. Based on the following array of journal entry summary objects, perform these analysis tasks:
-        1.  **Trend Score:** Calculate the percentage change in 'flareUpRisk' and 'mentalWellnessScore' from the earliest entry to the most recent entry.
+        1.  **Trend Score:** Calculate the percentage change in 'flareUpRisk' and 'mentalWellnessScore' from the earliest entry to the most recent entry. You MUST also provide the exact 'startValue' (from the earliest entry) and 'endValue' (from the most recent entry).
         2.  **Symptom Correlation:** Identify the single most common food ('foodEaten') and single most common mood ('moods') that appear in entries where 'flareUpRisk' is 80 or higher.
         3.  **Stool Pattern:** State the most frequent 'stoolType' across all entries and the total count of entries where 'bloodInStool' was true.
+        4.  **Overall Interpretation:** Write one single, non-technical sentence that summarizes the meaning of the trends for the user. For example: "It looks like your wellness has improved while your flare-up risk has decreased, which is a great sign."
 
         Return ONLY a single, valid JSON object that adheres strictly to the provided schema. The timeframe for trends should be "Last 30 Days".
 
@@ -234,10 +245,11 @@ export async function generateTrendAnalysis(entries: JournalSummary[]): Promise<
         console.error('Error generating trend analysis:', error);
         // Provide a fallback structure in case of an error
         return {
-            riskTrend: { metric: "FlareUpRisk", changePercent: 0, timeframe: "Last 30 Days" },
-            wellnessTrend: { metric: "MentalWellnessScore", changePercent: 0, timeframe: "Last 30 Days" },
+            riskTrend: { metric: "FlareUpRisk", changePercent: 0, timeframe: "Last 30 Days", startValue: 0, endValue: 0 },
+            wellnessTrend: { metric: "MentalWellnessScore", changePercent: 0, timeframe: "Last 30 Days", startValue: 0, endValue: 0 },
             correlationInsights: { highRiskFoodTrigger: "N/A", highRiskMoodTrigger: "N/A" },
-            stoolPattern: { mostFrequentType: "N/A", bloodInStoolCount: 0 }
+            stoolPattern: { mostFrequentType: "N/A", bloodInStoolCount: 0 },
+            overallInterpretation: "Could not determine trend. Please log more entries."
         };
     }
 }

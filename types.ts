@@ -46,11 +46,15 @@ export interface TrendAnalysisResult {
     metric: "FlareUpRisk";
     changePercent: number;
     timeframe: string;
+    startValue: number;
+    endValue: number;
   };
   wellnessTrend: {
     metric: "MentalWellnessScore";
     changePercent: number;
     timeframe: string;
+    startValue: number;
+    endValue: number;
   };
   correlationInsights: {
     highRiskFoodTrigger: string;
@@ -60,6 +64,7 @@ export interface TrendAnalysisResult {
     mostFrequentType: string;
     bloodInStoolCount: number;
   };
+  overallInterpretation: string;
 }
 
 

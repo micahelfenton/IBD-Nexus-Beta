@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { JournalEntry, TrendAnalysisResult, JournalSummary } from '../types';
 import { generateTrendAnalysis } from '../services/geminiService';
-import { ArrowLeftIcon, ArrowUpIcon, ArrowDownIcon, FoodIcon, MoodIcon, BodyAnatomyIcon, FireIcon } from './icons';
+import { ArrowLeftIcon, ArrowUpIcon, ArrowDownIcon, FoodIcon, MoodIcon, BodyAnatomyIcon, FireIcon, ChatBubbleBottomCenterTextIcon } from './icons';
 
 interface TrendAnalysisScreenProps {
   journalEntries: JournalEntry[];
@@ -25,7 +25,14 @@ const ErrorDisplay = ({ onRetry }: { onRetry: () => void }) => (
     </div>
 );
 
-const TrendCard: React.FC<{ title: string; value: number; metric: string }> = ({ title, value, metric }) => {
+interface TrendCardProps {
+    title: string;
+    value: number;
+    metric: string;
+    startValue: number;
+    endValue: number;
+}
+const TrendCard: React.FC<TrendCardProps> = ({ title, value, metric, startValue, endValue }) => {
     // Determine the implication of the change (good, bad, or neutral)
     const isGood = (metric === 'Wellness' && value > 0) || (metric === 'Risk' && value < 0);
     const isBad = (metric === 'Wellness' && value < 0) || (metric === 'Risk' && value > 0);
@@ -40,15 +47,27 @@ const TrendCard: React.FC<{ title: string; value: number; metric: string }> = ({
     
     // Display the absolute value of the percentage change, rounded to one decimal place.
     const formattedValue = parseFloat(Math.abs(value).toFixed(1));
+    
+    // Custom display logic for Risk vs. Wellness
+    const isRisk = metric === 'Risk';
+    const displayStart = isRisk ? startValue : startValue.toFixed(1);
+    const displayEnd = isRisk ? endValue : endValue.toFixed(1);
+    const suffix = isRisk ? '%' : '';
+
 
     return (
-        <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-            <h3 className="text-sm font-semibold text-slate-400">{title}</h3>
-            <div className={`my-2 text-4xl font-bold flex items-center justify-center gap-2 ${color}`}>
-                {icon}
-                <span>{formattedValue}%</span>
+        <div className="bg-slate-800/50 rounded-lg p-4 text-center flex flex-col justify-between min-h-[170px]">
+            <div>
+                <h3 className="text-sm font-semibold text-slate-400">{title}</h3>
+                <div className={`my-2 text-4xl font-bold flex items-center justify-center gap-2 ${color}`}>
+                    {icon}
+                    <span>{formattedValue}%</span>
+                </div>
+                <p className={`text-xs font-semibold ${color}`}>{text} over 30 days</p>
             </div>
-            <p className={`text-xs font-semibold ${color}`}>{text} over 30 days</p>
+             <p className="text-slate-500 text-xs mt-2">
+                From {displayStart}{suffix} to {displayEnd}{suffix}
+            </p>
         </div>
     );
 };
@@ -110,8 +129,27 @@ const TrendAnalysisScreen: React.FC<TrendAnalysisScreenProps> = ({ journalEntrie
             {!isLoading && !error && analysis && (
                 <div className="w-full max-w-2xl mx-auto space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                        <TrendCard title="Flare-Up Risk" value={analysis.riskTrend.changePercent} metric="Risk" />
-                        <TrendCard title="Wellness Score" value={analysis.wellnessTrend.changePercent} metric="Wellness" />
+                        <TrendCard 
+                            title="Flare-Up Risk" 
+                            value={analysis.riskTrend.changePercent} 
+                            metric="Risk"
+                            startValue={analysis.riskTrend.startValue}
+                            endValue={analysis.riskTrend.endValue}
+                        />
+                        <TrendCard 
+                            title="Wellness Score" 
+                            value={analysis.wellnessTrend.changePercent} 
+                            metric="Wellness"
+                            startValue={analysis.wellnessTrend.startValue}
+                            endValue={analysis.wellnessTrend.endValue}
+                        />
+                    </div>
+
+                    <div className="bg-slate-800/50 rounded-lg p-4">
+                        <h3 className="text-lg font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                            <ChatBubbleBottomCenterTextIcon className="w-6 h-6 text-cyan-400" /> Overall Interpretation
+                        </h3>
+                        <p className="text-slate-300">{analysis.overallInterpretation}</p>
                     </div>
                     
                     <h2 className="text-xl font-semibold text-slate-300 pt-4">Correlation Insights</h2>
