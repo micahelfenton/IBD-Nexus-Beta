@@ -186,3 +186,11 @@ export const DotsVerticalIcon: React.FC<IconProps> = (props) => (
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
     </svg>
 );
+
+export const MenuScannerIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.5h16.5v15H3.75v-15z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75h4.5M9.75 14.25h4.5M3.75 9.75h1.5M3.75 14.25h1.5M18.75 9.75h-1.5M18.75 14.25h-1.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 4.5a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM2.25 12h19.5" />
+    </svg>
+);

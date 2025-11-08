@@ -4,6 +4,29 @@ export enum AppScreen {
   JOURNAL_VIEW,
   DIET,
   TREND_ANALYSIS,
+  MENU_SCANNER,
+}
+
+export interface UserDietaryProfile {
+  avoidsInsolubleFiber: boolean;
+  avoidsHighFODMAP: boolean;
+  avoidsDairy: boolean;
+  avoidsSpicy: boolean;
+  avoidsFatty: boolean;
+}
+
+export type MenuItemRisk = 'safe' | 'caution' | 'avoid';
+
+export interface MenuItemAnalysis {
+    itemName: string;
+    risk: MenuItemRisk;
+    reason: string;
+    suggestion?: string;
+    boundingBox: BoundingBox;
+}
+
+export interface MenuAnalysisResult {
+    items: MenuItemAnalysis[];
 }
 
 export interface JournalSummary {

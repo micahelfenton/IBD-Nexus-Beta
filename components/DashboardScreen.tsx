@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { JournalEntry } from '../types';
-import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon } from './icons';
+import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon } from './icons';
 
 interface DashboardScreenProps {
   journalEntries: JournalEntry[];
   onNavigateToDiet: () => void;
   onNavigateToTrendAnalysis: () => void;
+  onNavigateToMenuScanner: () => void;
 }
 
 interface FoodStat {
@@ -96,13 +97,13 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
     }, [journalEntries]);
 
     return (
-        <div onClick={onClick} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1 md:col-span-2">
+        <div onClick={onClick} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1 md:col-span-1">
             <h2 className="font-semibold text-slate-300 mb-3 flex items-center gap-2">
                 <DietIcon className="w-5 h-5 text-cyan-400" />
                 Dietary Insights
             </h2>
             {dietInsightPreview.hasEnoughData ? (
-                 <><div className="grid grid-cols-2 gap-4 text-sm">
+                 <><div className="space-y-2 text-sm">
                     <div>
                         <p className="text-xs text-slate-500 mb-1">Top Safe Food</p>
                         {dietInsightPreview.topSafeFood ? (
@@ -124,7 +125,7 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
     );
 };
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner }) => {
     const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
 
     const filteredEntries = useMemo(() => {
@@ -226,6 +227,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                             </div>
                         </div>
                     </div>
+                    
+                     <div onClick={onNavigateToMenuScanner} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1 md:col-span-2">
+                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><MenuScannerIcon className="w-5 h-5 text-cyan-400" />AI Menu Scanner</h2>
+                        <p className="text-slate-400 text-sm">Dine out with confidence. Instantly scan any menu to see which options are safe for you based on your personal diet profile.</p>
+                         <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">Open Scanner &rarr;</p>
+                    </div>
 
                     <DietInsightCard journalEntries={journalEntries} onClick={onNavigateToDiet} />
                     
@@ -235,7 +242,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                          <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">View Analysis &rarr;</p>
                     </div>
 
-                    <div className="bg-slate-800/50 rounded-lg p-4">
+                    <div className="bg-slate-800/50 rounded-lg p-4 md:col-span-2">
                          <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><ResearchIcon className="w-5 h-5 text-cyan-400" />Research Contribution</h2>
                          <p className="text-slate-400 text-sm">You've logged <span className="font-bold text-white">{journalEntries.length}</span> entries! Your anonymized data helps train our AI to be more accurate for everyone.</p>
                     </div>

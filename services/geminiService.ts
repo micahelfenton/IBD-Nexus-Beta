@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { JournalSummary, ImageAnalysisResult, TrendAnalysisResult } from '../types';
+import { JournalSummary, ImageAnalysisResult, TrendAnalysisResult, MenuAnalysisResult, UserDietaryProfile } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -251,5 +251,95 @@ export async function generateTrendAnalysis(entries: JournalSummary[]): Promise<
             stoolPattern: { mostFrequentType: "N/A", bloodInStoolCount: 0 },
             overallInterpretation: "Could not determine trend. Please log more entries."
         };
+    }
+}
+
+const menuAnalysisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        items: {
+            type: Type.ARRAY,
+            description: 'An array of analyzed menu items found in the image.',
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    itemName: { type: Type.STRING, description: 'The name of the menu item.' },
+                    risk: { type: Type.STRING, description: 'Risk level: "safe", "caution", or "avoid".' },
+                    reason: { type: Type.STRING, description: 'A brief explanation for the assigned risk level.' },
+                    suggestion: { type: Type.STRING, description: 'A suggested modification, if applicable (for "caution" items).' },
+                    boundingBox: {
+                        type: Type.OBJECT,
+                        properties: {
+                            x: { type: Type.NUMBER, description: 'Top-left corner X coordinate (normalized 0-1)'},
+                            y: { type: Type.NUMBER, description: 'Top-left corner Y coordinate (normalized 0-1)'},
+                            width: { type: Type.NUMBER, description: 'Width of the box (normalized 0-1)'},
+                            height: { type: Type.NUMBER, description: 'Height of the box (normalized 0-1)'},
+                        },
+                        required: ['x', 'y', 'width', 'height']
+                    }
+                },
+                required: ['itemName', 'risk', 'reason', 'boundingBox']
+            }
+        }
+    },
+    required: ['items']
+};
+
+export async function analyzeMenu(base64Image: string, profile: UserDietaryProfile): Promise<MenuAnalysisResult> {
+    const parts = base64Image.split(',');
+    if (parts.length < 2) throw new Error("Invalid base64 image format");
+    const mimeTypeMatch = parts[0].match(/:(.*?);/);
+    if (!mimeTypeMatch) throw new Error("Could not determine mime type from base64 string");
+    
+    const mimeType = mimeTypeMatch[1];
+    const data = parts[1];
+    const imagePart = { inlineData: { mimeType, data } };
+    
+    const dietaryRestrictions = [];
+    if (profile.avoidsInsolubleFiber) dietaryRestrictions.push("Insoluble Fiber (e.g., whole grains, raw vegetables with skins)");
+    if (profile.avoidsHighFODMAP) dietaryRestrictions.push("High-FODMAP ingredients (e.g., onion, garlic, beans, certain fruits)");
+    if (profile.avoidsDairy) dietaryRestrictions.push("Dairy (e.g., milk, cream, cheese)");
+    if (profile.avoidsSpicy) dietaryRestrictions.push("Spicy ingredients (e.g., chili, cayenne)");
+    if (profile.avoidsFatty) dietaryRestrictions.push("High-fat/fried foods (e.g., deep-fried items, heavy oils)");
+
+    const prompt = `
+        You are an expert-level visual analysis AI. Your task is to analyze a restaurant menu image for an IBD patient with these dietary restrictions: ${dietaryRestrictions.join(', ')}. Your absolute top priority is generating **surgically precise** bounding boxes for each menu item.
+
+        **CRITICAL INSTRUCTIONS - FOLLOW THIS PROCESS EXACTLY:**
+
+        1.  **MENTAL SCAN**: First, visually scan the entire image to identify logical text blocks that represent individual menu items. A "menu item" includes its name AND its description, which might span multiple lines.
+
+        2.  **ONE ITEM AT A TIME**: Process each identified menu item individually. Do not try to process them all at once.
+
+        3.  **FOR EACH ITEM - GENERATE THE BOUNDING BOX**:
+            *   **Step A: Find the Text Boundaries.** Identify the absolute top, bottom, left, and right extents of the text for this single item.
+            *   **Step B: Create the Tightest Possible Box.** The bounding box coordinates MUST tightly enclose ONLY the text. There should be almost zero padding.
+            *   **Step C: ABSOLUTELY IGNORE NON-TEXT.** Your bounding box must NOT include page spirals, lines on the paper, illustrations, or large gaps between the item and the next. This is a critical failure point. If you see a spiral binding, your box must stop before it.
+            *   **Step D: SELF-CORRECT.** Look at your generated box. Is it too wide? Is it too tall? Does it include the spiral? If so, shrink it until it ONLY covers the text pixels.
+
+        4.  **FOR EACH ITEM - PERFORM RISK ANALYSIS**:
+            *   Read the text inside your perfect bounding box.
+            *   Infer ingredients (e.g., "Fried Chicken" implies high fat and likely wheat flour).
+            *   Assign a risk ("safe", "caution", "avoid") based on the user's restrictions.
+            *   Provide a concise reason for the risk.
+            *   For "caution" items, provide an actionable suggestion (e.g., "Ask for grilled instead of fried").
+
+        5.  **FINALIZE JSON**: Compile the results for all items into a single JSON object that strictly adheres to the schema. The accuracy of your bounding boxes is the most important part of this task. Do not fail on this point.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }, imagePart] },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: menuAnalysisSchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as MenuAnalysisResult;
+    } catch (error) {
+        console.error('Error analyzing menu:', error);
+        return { items: [] };
     }
 }

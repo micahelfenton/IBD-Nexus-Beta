@@ -1,14 +1,187 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import NewEntryScreen from './components/VoiceInputScreen';
 import SummaryScreen from './components/SummaryScreen';
 import DashboardScreen from './components/DashboardScreen';
 import JournalView from './components/JournalView';
 import DietScreen from './components/DietScreen';
 import TrendAnalysisScreen from './components/TrendAnalysisScreen';
-import { AppScreen, NewEntryState, JournalEntry, JournalSummary, ImageAnalysisResult } from './types';
-import { generateSummary, analyzeStoolImage } from './services/geminiService';
-import { DashboardIcon, JournalIcon, PlusIcon } from './components/icons';
+import { AppScreen, NewEntryState, JournalEntry, JournalSummary, ImageAnalysisResult, UserDietaryProfile, MenuAnalysisResult, MenuItemAnalysis } from './types';
+import { generateSummary, analyzeStoolImage, analyzeMenu } from './services/geminiService';
+import { DashboardIcon, JournalIcon, PlusIcon, ArrowLeftIcon, XIcon } from './components/icons';
 import { sampleJournalEntries } from './sampleData'; // Using sample data
+
+// --- AI Menu Scanner Component ---
+interface MenuScannerScreenProps {
+  userProfile: UserDietaryProfile;
+  onBack: () => void;
+}
+
+const MenuScannerScreen: React.FC<MenuScannerScreenProps> = ({ userProfile, onBack }) => {
+    const [capturedImage, setCapturedImage] = useState<string | null>(null);
+    const [analysisResult, setAnalysisResult] = useState<MenuAnalysisResult | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedItem, setSelectedItem] = useState<MenuItemAnalysis | null>(null);
+    
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+
+    useEffect(() => {
+        const startCamera = async () => {
+            try {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        streamRef.current = stream;
+                    }
+                }
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                setError("Could not access camera. Please check permissions.");
+            }
+        };
+        startCamera();
+
+        return () => {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
+
+    const handleCapture = () => {
+        if (videoRef.current && canvasRef.current) {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d')?.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            setCapturedImage(dataUrl);
+            handleAnalyze(dataUrl);
+        }
+    };
+
+    const handleAnalyze = async (image: string) => {
+        setIsLoading(true);
+        setError(null);
+        setAnalysisResult(null);
+        try {
+            const result = await analyzeMenu(image, userProfile);
+            setAnalysisResult(result);
+        } catch (err) {
+            setError("Failed to analyze the menu. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    const handleScanAgain = () => {
+        setCapturedImage(null);
+        setAnalysisResult(null);
+        setError(null);
+        setSelectedItem(null);
+    };
+
+    const riskColorClasses = {
+        safe: 'border-green-400',
+        caution: 'border-yellow-400',
+        avoid: 'border-red-500',
+    };
+    
+    const riskHighlightClasses = {
+        safe: 'border-green-400 glow-green',
+        caution: 'border-yellow-400 glow-yellow',
+        avoid: 'border-red-500 glow-red',
+    };
+
+
+    return (
+        <div className="flex flex-col h-full bg-slate-900 text-white">
+            <header className="relative flex items-center justify-between p-4 flex-shrink-0">
+                <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-700/50 transition-colors z-10">
+                    <ArrowLeftIcon className="w-6 h-6" />
+                </button>
+                <h1 className="text-2xl font-bold absolute left-1/2 -translate-x-1/2">AI Menu Scanner</h1>
+            </header>
+
+            <main className="flex-grow relative overflow-hidden">
+                {!capturedImage ? (
+                    <div className="w-full h-full relative">
+                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent flex flex-col items-center">
+                            <p className="text-center text-sm mb-4">Position the menu in the frame and hold steady.</p>
+                            <button onClick={handleCapture} className="w-20 h-20 rounded-full bg-white flex items-center justify-center border-4 border-slate-400">
+                                <div className="w-16 h-16 rounded-full bg-white border-2 border-slate-900"></div>
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="w-full h-full relative">
+                        <img ref={imageRef} src={capturedImage} alt="Scanned menu" className="w-full h-full object-contain" />
+                        {analysisResult && imageRef.current && analysisResult.items.map((item, index) => {
+                            const imgWidth = imageRef.current!.clientWidth;
+                            const imgHeight = imageRef.current!.clientHeight;
+                            const isSelected = selectedItem?.itemName === item.itemName && selectedItem?.boundingBox === item.boundingBox;
+
+                            return (
+                                <button
+                                    key={index}
+                                    className={`absolute border-2 rounded-md transition-all duration-300 ease-in-out ${riskHighlightClasses[item.risk]} ${isSelected ? 'bg-white/20' : 'bg-transparent hover:bg-white/10'}`}
+                                    style={{
+                                        left: `${item.boundingBox.x * imgWidth}px`,
+                                        top: `${item.boundingBox.y * imgHeight}px`,
+                                        width: `${item.boundingBox.width * imgWidth}px`,
+                                        height: `${item.boundingBox.height * imgHeight}px`,
+                                    }}
+                                    onClick={() => setSelectedItem(item)}
+                                />
+                            );
+                        })}
+                        {isLoading && (
+                            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+                                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-cyan-500"></div>
+                                <p className="mt-4 text-lg">Analyzing Menu...</p>
+                            </div>
+                        )}
+                         {error && (
+                            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-center p-4">
+                               <p className="text-red-400">{error}</p>
+                               <button onClick={handleScanAgain} className="mt-4 px-4 py-2 bg-cyan-500 rounded-lg font-semibold hover:bg-cyan-400">Scan Again</button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                 {selectedItem && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-4 z-20" onClick={() => setSelectedItem(null)}>
+                        <div className={`bg-slate-800 rounded-xl p-6 w-full max-w-sm border-t-4 ${riskColorClasses[selectedItem.risk]}`} onClick={(e) => e.stopPropagation()}>
+                           <h2 className="text-xl font-bold capitalize">{selectedItem.itemName}</h2>
+                           <p className={`text-sm font-bold uppercase mb-3 ${riskColorClasses[selectedItem.risk].replace('border-green-400', 'text-green-400').replace('border-yellow-400', 'text-yellow-400').replace('border-red-500', 'text-red-400')}`}>{selectedItem.risk}</p>
+                           <p className="text-slate-300 mb-2"><span className="font-semibold text-slate-400">Reason:</span> {selectedItem.reason}</p>
+                           {selectedItem.suggestion && <p className="text-cyan-300"><span className="font-semibold text-cyan-400">Suggestion:</span> {selectedItem.suggestion}</p>}
+                           <button onClick={() => setSelectedItem(null)} className="mt-4 w-full text-center py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors">Close</button>
+                        </div>
+                    </div>
+                )}
+            </main>
+            
+            {capturedImage && !isLoading && (
+                 <div className="p-4 flex-shrink-0">
+                    <button onClick={handleScanAgain} className="w-full py-3 bg-cyan-500 rounded-lg text-lg font-semibold hover:bg-cyan-400 transition-colors">
+                        Scan Again
+                    </button>
+                 </div>
+            )}
+
+            <canvas ref={canvasRef} className="hidden"></canvas>
+        </div>
+    );
+};
+
+// --- End Menu Scanner ---
 
 const ProcessingScreen = () => (
     <div className="flex flex-col items-center justify-center h-full text-center bg-gradient-to-br from-slate-900 to-slate-800 text-white">
@@ -19,6 +192,14 @@ const ProcessingScreen = () => (
 );
 
 const JOURNAL_STORAGE_KEY = 'IBD_NEXUS_JOURNAL_ENTRIES';
+
+const MOCK_USER_DIET_PROFILE: UserDietaryProfile = {
+  avoidsInsolubleFiber: true,
+  avoidsHighFODMAP: true,
+  avoidsDairy: false,
+  avoidsSpicy: true,
+  avoidsFatty: false,
+};
 
 function App() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>(AppScreen.DASHBOARD);
@@ -162,6 +343,7 @@ function App() {
                         journalEntries={journalEntries} 
                         onNavigateToDiet={() => setActiveScreen(AppScreen.DIET)} 
                         onNavigateToTrendAnalysis={() => setActiveScreen(AppScreen.TREND_ANALYSIS)}
+                        onNavigateToMenuScanner={() => setActiveScreen(AppScreen.MENU_SCANNER)}
                     />;
         case AppScreen.JOURNAL_VIEW:
             return <JournalView journalEntries={journalEntries} onAttachImage={handleAttachImageToEntry} />;
@@ -169,11 +351,14 @@ function App() {
             return <DietScreen journalEntries={journalEntries} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
         case AppScreen.TREND_ANALYSIS:
             return <TrendAnalysisScreen journalEntries={journalEntries} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
+        case AppScreen.MENU_SCANNER:
+            return <MenuScannerScreen userProfile={MOCK_USER_DIET_PROFILE} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
         default:
             return <DashboardScreen 
                         journalEntries={journalEntries} 
                         onNavigateToDiet={() => setActiveScreen(AppScreen.DIET)}
                         onNavigateToTrendAnalysis={() => setActiveScreen(AppScreen.TREND_ANALYSIS)}
+                        onNavigateToMenuScanner={() => setActiveScreen(AppScreen.MENU_SCANNER)}
                     />;
     }
   }

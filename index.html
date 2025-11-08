@@ -7,6 +7,10 @@
     <title>IBD Nexus: Your AI Wellness Journal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+      @keyframes glow-green {
+        0%, 100% { filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.5)); }
+        50% { filter: drop-shadow(0 0 16px rgba(74, 222, 128, 0.7)); }
+      }
       @keyframes glow-blue {
         0%, 100% { filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.4)); }
         50% { filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.6)); }
@@ -19,6 +23,7 @@
         0%, 100% { filter: drop-shadow(0 0 8px rgba(248, 113, 113, 0.5)); }
         50% { filter: drop-shadow(0 0 16px rgba(248, 113, 113, 0.8)); }
       }
+      .glow-green { animation: glow-green 4s ease-in-out infinite; }
       .glow-blue { animation: glow-blue 4s ease-in-out infinite; }
       .glow-yellow { animation: glow-yellow 3s ease-in-out infinite; }
       .glow-red { animation: glow-red 2.5s ease-in-out infinite; }

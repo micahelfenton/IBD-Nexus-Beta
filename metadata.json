@@ -2,6 +2,7 @@
   "name": "IBD Nexus",
   "description": "A modern, empathetic digital therapeutic app that supports users with IBD to record their physical symptoms and mental state through a conversational voice journal. The AI transcribes, analyzes, and summarizes entries to provide actionable insights and track wellness over time.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }
