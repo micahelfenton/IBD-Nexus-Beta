@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { JournalEntry } from '../types';
-import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon } from './icons';
+import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon } from './icons';
 
 interface DashboardScreenProps {
   journalEntries: JournalEntry[];
   onNavigateToDiet: () => void;
   onNavigateToTrendAnalysis: () => void;
   onNavigateToMenuScanner: () => void;
+  onNavigateToIngredientScanner: () => void;
 }
 
 interface FoodStat {
@@ -125,7 +126,7 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
     );
 };
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner, onNavigateToIngredientScanner }) => {
     const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
 
     const filteredEntries = useMemo(() => {
@@ -228,9 +229,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                         </div>
                     </div>
                     
-                     <div onClick={onNavigateToMenuScanner} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1 md:col-span-2">
+                    <div onClick={onNavigateToMenuScanner} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1">
                         <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><MenuScannerIcon className="w-5 h-5 text-cyan-400" />AI Menu Scanner</h2>
-                        <p className="text-slate-400 text-sm">Dine out with confidence. Instantly scan any menu to see which options are safe for you based on your personal diet profile.</p>
+                        <p className="text-slate-400 text-sm">Scan restaurant menus to see which options are safe for you.</p>
+                         <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">Open Scanner &rarr;</p>
+                    </div>
+
+                    <div onClick={onNavigateToIngredientScanner} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1">
+                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><IngredientScannerIcon className="w-5 h-5 text-cyan-400" />Ingredient Scanner</h2>
+                        <p className="text-slate-400 text-sm">Scan product labels to analyze ingredients for potential triggers.</p>
                          <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">Open Scanner &rarr;</p>
                     </div>
 
@@ -238,7 +245,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                     
                     <div onClick={onNavigateToTrendAnalysis} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors">
                         <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><CrystalBallIcon className="w-5 h-5 text-cyan-400" />Trend Analysis</h2>
-                        <p className="text-slate-400 text-sm">Get AI-powered insights on your flare-up risk, wellness trends, and symptom triggers.</p>
+                        <p className="text-slate-400 text-sm">Get AI-powered insights on your flare-up risk and wellness trends.</p>
                          <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">View Analysis &rarr;</p>
                     </div>
 

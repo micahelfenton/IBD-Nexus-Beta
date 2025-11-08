@@ -194,3 +194,13 @@ export const MenuScannerIcon: React.FC<IconProps> = (props) => (
       <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 4.5a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5zM2.25 12h19.5" />
     </svg>
 );
+
+export const IngredientScannerIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.59 4.59A7 7 0 112.5 11.59" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14 14l3.5 3.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 7h7" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 10h4" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 13h5" />
+    </svg>
+);

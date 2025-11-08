@@ -5,6 +5,7 @@ export enum AppScreen {
   DIET,
   TREND_ANALYSIS,
   MENU_SCANNER,
+  INGREDIENT_SCANNER,
 }
 
 export interface UserDietaryProfile {
@@ -27,6 +28,18 @@ export interface MenuItemAnalysis {
 
 export interface MenuAnalysisResult {
     items: MenuItemAnalysis[];
+}
+
+export type IngredientRisk = 'green' | 'amber' | 'red';
+
+export interface IngredientAnalysis {
+    ingredientName: string;
+    risk: IngredientRisk;
+    reason: string;
+}
+
+export interface IngredientAnalysisResult {
+    ingredients: IngredientAnalysis[];
 }
 
 export interface JournalSummary {

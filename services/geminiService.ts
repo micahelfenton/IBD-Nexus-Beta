@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { JournalSummary, ImageAnalysisResult, TrendAnalysisResult, MenuAnalysisResult, UserDietaryProfile } from '../types';
+import { JournalSummary, ImageAnalysisResult, TrendAnalysisResult, MenuAnalysisResult, UserDietaryProfile, IngredientAnalysisResult } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -341,5 +341,79 @@ export async function analyzeMenu(base64Image: string, profile: UserDietaryProfi
     } catch (error) {
         console.error('Error analyzing menu:', error);
         return { items: [] };
+    }
+}
+
+const ingredientAnalysisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        ingredients: {
+            type: Type.ARRAY,
+            description: 'An array of analyzed ingredients found in the image.',
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    ingredientName: { type: Type.STRING, description: 'The name of the ingredient.' },
+                    risk: { type: Type.STRING, description: 'Risk level: "green", "amber", or "red".' },
+                    reason: { type: Type.STRING, description: 'A brief explanation for the assigned risk level.' },
+                },
+                required: ['ingredientName', 'risk', 'reason']
+            }
+        }
+    },
+    required: ['ingredients']
+};
+
+
+export async function analyzeIngredients(base64Image: string, profile: UserDietaryProfile): Promise<IngredientAnalysisResult> {
+    const parts = base64Image.split(',');
+    if (parts.length < 2) throw new Error("Invalid base64 image format");
+    const mimeTypeMatch = parts[0].match(/:(.*?);/);
+    if (!mimeTypeMatch) throw new Error("Could not determine mime type from base64 string");
+    
+    const mimeType = mimeTypeMatch[1];
+    const data = parts[1];
+    const imagePart = { inlineData: { mimeType, data } };
+    
+    const dietaryRestrictions = [];
+    if (profile.avoidsInsolubleFiber) dietaryRestrictions.push("Insoluble Fiber (e.g., whole grains, raw vegetables with skins)");
+    if (profile.avoidsHighFODMAP) dietaryRestrictions.push("High-FODMAP ingredients (e.g., onion, garlic, beans, certain fruits)");
+    if (profile.avoidsDairy) dietaryRestrictions.push("Dairy (e.g., milk, cream, cheese)");
+    if (profile.avoidsSpicy) dietaryRestrictions.push("Spicy ingredients (e.g., chili, cayenne)");
+    if (profile.avoidsFatty) dietaryRestrictions.push("High-fat/fried foods (e.g., deep-fried items, heavy oils)");
+    
+    const prompt = `
+        You are an expert nutritional analysis AI for IBD patients. Your task is to analyze an image of a food product's ingredients list.
+
+        **CRITICAL INSTRUCTIONS:**
+
+        1.  **OCR and Extraction**: The text will be small. Perform high-accuracy OCR to read the ingredients list. Ingredients are typically listed after a keyword like "Ingredients:". Extract every single ingredient from this list. Be meticulous in parsing comma-separated items and items within parentheses.
+
+        2.  **User Profile Analysis**: Analyze each extracted ingredient against the user's dietary profile: ${dietaryRestrictions.join(', ')}.
+
+        3.  **Risk Classification**: For each ingredient, assign a risk level:
+            *   **'red' (Avoid)**: The ingredient is a known major trigger or directly conflicts with the user's profile (e.g., 'milk' if user avoids dairy, 'chili powder' if user avoids spicy).
+            *   **'amber' (Caution)**: The ingredient could be problematic for some people with IBD or depending on quantity (e.g., 'inulin' as a fiber source, 'natural flavors' which can be ambiguous, high-fat oils).
+            *   **'green' (Safe)**: The ingredient is generally considered safe and well-tolerated for IBD (e.g., 'salt', 'rice flour', 'water').
+
+        4.  **Provide a Reason**: For every ingredient, provide a concise, clear reason for its classification. For 'red' and 'amber', explain why it's a risk. For 'green', briefly state why it's likely safe (e.g., "Generally well-tolerated").
+
+        5.  **Finalize JSON**: Compile the results for all identified ingredients into a single JSON object that strictly adheres to the provided schema. If you cannot read any ingredients, return an empty array.
+    `;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }, imagePart] },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: ingredientAnalysisSchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as IngredientAnalysisResult;
+    } catch (error) {
+        console.error('Error analyzing ingredients:', error);
+        return { ingredients: [] };
     }
 }
