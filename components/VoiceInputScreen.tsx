@@ -11,16 +11,6 @@ interface NewEntryScreenProps {
   onCancel: () => void;
 }
 
-// Helper functions for audio encoding/decoding
-function encode(bytes: Uint8Array): string {
-  let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 // The Blob type for media input is not exported by the SDK, so we define it locally.
 interface MediaBlob {
   data: string;
@@ -33,38 +23,39 @@ interface LiveSession {
   close(): void;
 }
 
-// This AudioWorklet processor runs in a separate thread to avoid blocking the main UI thread.
-// It buffers audio and sends it in chunks of 4096 samples, matching the previous implementation.
-const audioProcessorWorklet = `
-class AudioProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.bufferSize = 4096;
-    this._buffer = new Float32Array(this.bufferSize);
-    this._bufferIndex = 0;
+// Helper function to convert audio buffer to base64 PCM data
+function encode(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
-
-  process(inputs) {
-    const input = inputs[0];
-    if (input && input.length > 0) {
-      const channelData = input[0];
-      
-      // Add new data to our buffer
-      for (let i = 0; i < channelData.length; i++) {
-        this._buffer[this._bufferIndex++] = channelData[i];
-        
-        // When buffer is full, send it to the main thread
-        if (this._bufferIndex === this.bufferSize) {
-          this.port.postMessage(this._buffer);
-          this._bufferIndex = 0; // Reset buffer
-        }
-      }
-    }
-    return true; // Keep the processor alive
-  }
+  return btoa(binary);
 }
-registerProcessor('audio-processor', AudioProcessor);
-`;
+
+function processAudioData(inputData: Float32Array): { pcmBlob: MediaBlob, rms: number } {
+    // Calculate Root Mean Square for silence detection
+    let sum = 0.0;
+    for (let j = 0; j < inputData.length; j++) {
+      sum += inputData[j] * inputData[j];
+    }
+    const rms = Math.sqrt(sum / inputData.length);
+    
+    // Convert Float32 audio data to 16-bit PCM
+    const l = inputData.length;
+    const int16 = new Int16Array(l);
+    for (let j = 0; j < l; j++) {
+      const sample = Math.max(-1, Math.min(1, inputData[j]));
+      int16[j] = sample < 0 ? sample * 32768 : sample * 32767;
+    }
+    
+    const pcmBlob = {
+      data: encode(new Uint8Array(int16.buffer)),
+      mimeType: 'audio/pcm;rate=16000',
+    };
+
+    return { pcmBlob, rms };
+}
 
 
 const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTranscription, onCancel }) => {
@@ -76,9 +67,8 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
   const sessionRef = useRef<LiveSession | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   
   // Refs for performance optimization: buffer transcription updates and batch them.
@@ -104,14 +94,10 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
     }
-    if (gainNodeRef.current) {
-        gainNodeRef.current.disconnect();
-        gainNodeRef.current = null;
-    }
-    if (workletNodeRef.current) {
-        workletNodeRef.current.port.onmessage = null;
-        workletNodeRef.current.disconnect();
-        workletNodeRef.current = null;
+    if (processorRef.current) {
+        processorRef.current.onaudioprocess = null;
+        processorRef.current.disconnect();
+        processorRef.current = null;
     }
     if (sourceRef.current) {
         sourceRef.current.disconnect();
@@ -165,12 +151,10 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
       // Cast to 'any' to allow for vendor-prefixed AudioContext.
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-
-      // Create and add the AudioWorklet module. This must be done before creating a node.
-      const blob = new Blob([audioProcessorWorklet], { type: 'application/javascript' });
-      const workletURL = URL.createObjectURL(blob);
-      await audioContextRef.current.audioWorklet.addModule(workletURL);
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+      // FIX: Explicitly resume the audio context to ensure it starts immediately.
+      await audioContextRef.current.resume();
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -180,60 +164,48 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
         callbacks: {
           onopen: () => {
             console.log('Live session opened.');
-            if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+            if (!audioContextRef.current || audioContextRef.current.state === 'closed' || !streamRef.current) {
                 console.warn("AudioContext closed before live session could open. Aborting setup.");
                 sessionPromise.then(session => session.close());
                 return;
             }
-            sourceRef.current = audioContextRef.current!.createMediaStreamSource(stream);
-            const workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-processor');
-            workletNodeRef.current = workletNode;
-            gainNodeRef.current = audioContextRef.current!.createGain();
-            gainNodeRef.current.gain.value = 0; // Mute output to prevent feedback
             
-            workletNode.port.onmessage = (event) => {
-              const inputData = event.data; // Float32Array from the worklet
+            sourceRef.current = audioContextRef.current.createMediaStreamSource(streamRef.current);
+            // Using the deprecated but highly reliable ScriptProcessorNode for stability.
+            // Buffer size of 2048 gives ~128ms latency, a good balance of responsiveness and reliability.
+            const processor = audioContextRef.current.createScriptProcessor(2048, 1, 1);
+            processorRef.current = processor;
 
-              // --- Silence Detection Logic ---
-              let sum = 0.0;
-              for (let i = 0; i < inputData.length; i++) {
-                sum += inputData[i] * inputData[i];
-              }
-              const rms = Math.sqrt(sum / inputData.length);
-              const SILENCE_THRESHOLD = 0.01; // May need tuning
+            processor.onaudioprocess = (audioProcessingEvent) => {
+                const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+                const { pcmBlob, rms } = processAudioData(inputData);
 
-              if (rms < SILENCE_THRESHOLD) {
-                if (silenceTimerRef.current === null) {
-                  silenceTimerRef.current = window.setTimeout(() => {
-                    setIsSilent(true);
-                  }, 3000); // 3 seconds of silence triggers the message
+                // --- Silence Detection Logic ---
+                const SILENCE_THRESHOLD = 0.01;
+                if (rms < SILENCE_THRESHOLD) {
+                    if (silenceTimerRef.current === null) {
+                        silenceTimerRef.current = window.setTimeout(() => {
+                            setIsSilent(true);
+                        }, 3000);
+                    }
+                } else {
+                    setIsSilent(false);
+                    if (silenceTimerRef.current !== null) {
+                        clearTimeout(silenceTimerRef.current);
+                        silenceTimerRef.current = null;
+                    }
                 }
-              } else {
-                setIsSilent(false);
-                if (silenceTimerRef.current !== null) {
-                  clearTimeout(silenceTimerRef.current);
-                  silenceTimerRef.current = null;
-                }
-              }
 
-              // --- Audio Processing and Sending ---
-              const l = inputData.length;
-              const int16 = new Int16Array(l);
-              for (let i = 0; i < l; i++) {
-                int16[i] = inputData[i] * 32768;
-              }
-              const pcmBlob: MediaBlob = {
-                data: encode(new Uint8Array(int16.buffer)),
-                mimeType: 'audio/pcm;rate=16000',
-              };
-              sessionPromise.then((session) => {
-                  session.sendRealtimeInput({ media: pcmBlob });
-              });
+                // --- Audio Sending ---
+                // Use the promise to ensure the session is ready before sending data
+                sessionPromise.then((session) => {
+                    session.sendRealtimeInput({ media: pcmBlob });
+                });
             };
             
-            sourceRef.current.connect(workletNode);
-            workletNode.connect(gainNodeRef.current);
-            gainNodeRef.current.connect(audioContextRef.current!.destination);
+            // Connect the audio graph. The processor must be connected to the destination to work.
+            sourceRef.current.connect(processor);
+            processor.connect(audioContextRef.current.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
