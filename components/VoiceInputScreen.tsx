@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 // The type for the live session object is not exported from the library.
 // A local interface is defined below based on its usage.
-import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { SpeakingHeadIcon, StopIcon } from './icons';
 
 interface NewEntryScreenProps {
@@ -20,11 +21,51 @@ function encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Define a local interface for the live session object as it's not exported.
+// The Blob type for media input is not exported by the SDK, so we define it locally.
+interface MediaBlob {
+  data: string;
+  mimeType: string;
+}
+
+// Define a local interface for the live session object as its types are not exported.
 interface LiveSession {
-  sendRealtimeInput(input: { media: Blob }): void;
+  sendRealtimeInput(input: { media: MediaBlob }): void;
   close(): void;
 }
+
+// This AudioWorklet processor runs in a separate thread to avoid blocking the main UI thread.
+// It buffers audio and sends it in chunks of 4096 samples, matching the previous implementation.
+const audioProcessorWorklet = `
+class AudioProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.bufferSize = 4096;
+    this._buffer = new Float32Array(this.bufferSize);
+    this._bufferIndex = 0;
+  }
+
+  process(inputs) {
+    const input = inputs[0];
+    if (input && input.length > 0) {
+      const channelData = input[0];
+      
+      // Add new data to our buffer
+      for (let i = 0; i < channelData.length; i++) {
+        this._buffer[this._bufferIndex++] = channelData[i];
+        
+        // When buffer is full, send it to the main thread
+        if (this._bufferIndex === this.bufferSize) {
+          this.port.postMessage(this._buffer);
+          this._bufferIndex = 0; // Reset buffer
+        }
+      }
+    }
+    return true; // Keep the processor alive
+  }
+}
+registerProcessor('audio-processor', AudioProcessor);
+`;
+
 
 const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTranscription, onCancel }) => {
   const [isListening, setIsListening] = useState(false);
@@ -35,7 +76,7 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
   const sessionRef = useRef<LiveSession | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
@@ -67,9 +108,10 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
         gainNodeRef.current.disconnect();
         gainNodeRef.current = null;
     }
-    if (processorRef.current) {
-        processorRef.current.disconnect();
-        processorRef.current = null;
+    if (workletNodeRef.current) {
+        workletNodeRef.current.port.onmessage = null;
+        workletNodeRef.current.disconnect();
+        workletNodeRef.current = null;
     }
     if (sourceRef.current) {
         sourceRef.current.disconnect();
@@ -125,6 +167,11 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
       // Cast to 'any' to allow for vendor-prefixed AudioContext.
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
 
+      // Create and add the AudioWorklet module. This must be done before creating a node.
+      const blob = new Blob([audioProcessorWorklet], { type: 'application/javascript' });
+      const workletURL = URL.createObjectURL(blob);
+      await audioContextRef.current.audioWorklet.addModule(workletURL);
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -139,12 +186,13 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
                 return;
             }
             sourceRef.current = audioContextRef.current!.createMediaStreamSource(stream);
-            processorRef.current = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+            const workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-processor');
+            workletNodeRef.current = workletNode;
             gainNodeRef.current = audioContextRef.current!.createGain();
             gainNodeRef.current.gain.value = 0; // Mute output to prevent feedback
             
-            processorRef.current.onaudioprocess = (audioProcessingEvent) => {
-              const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+            workletNode.port.onmessage = (event) => {
+              const inputData = event.data; // Float32Array from the worklet
 
               // --- Silence Detection Logic ---
               let sum = 0.0;
@@ -174,7 +222,7 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
               for (let i = 0; i < l; i++) {
                 int16[i] = inputData[i] * 32768;
               }
-              const pcmBlob: Blob = {
+              const pcmBlob: MediaBlob = {
                 data: encode(new Uint8Array(int16.buffer)),
                 mimeType: 'audio/pcm;rate=16000',
               };
@@ -183,8 +231,8 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
               });
             };
             
-            sourceRef.current.connect(processorRef.current);
-            processorRef.current.connect(gainNodeRef.current);
+            sourceRef.current.connect(workletNode);
+            workletNode.connect(gainNodeRef.current);
             gainNodeRef.current.connect(audioContextRef.current!.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
