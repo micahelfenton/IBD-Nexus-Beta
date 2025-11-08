@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 // The type for the live session object is not exported from the library.
 // A local interface is defined below based on its usage.
@@ -33,34 +34,25 @@ function encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function processAudioData(inputData: Float32Array): { pcmBlob: MediaBlob, rms: number } {
-    // Calculate Root Mean Square for silence detection
-    let sum = 0.0;
-    for (let j = 0; j < inputData.length; j++) {
-      sum += inputData[j] * inputData[j];
-    }
-    const rms = Math.sqrt(sum / inputData.length);
-    
-    // Convert Float32 audio data to 16-bit PCM
+// Converts raw Float32 audio data into the base64-encoded 16-bit PCM format the API requires.
+function processAudioData(inputData: Float32Array): MediaBlob {
     const l = inputData.length;
     const int16 = new Int16Array(l);
+    // Clamp and convert to 16-bit PCM
     for (let j = 0; j < l; j++) {
       const sample = Math.max(-1, Math.min(1, inputData[j]));
       int16[j] = sample < 0 ? sample * 32768 : sample * 32767;
     }
     
-    const pcmBlob = {
+    return {
       data: encode(new Uint8Array(int16.buffer)),
       mimeType: 'audio/pcm;rate=16000',
     };
-
-    return { pcmBlob, rms };
 }
 
 
 const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTranscription, onCancel }) => {
   const [isListening, setIsListening] = useState(false);
-  const [isSilent, setIsSilent] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -69,22 +61,9 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
   const streamRef = useRef<MediaStream | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const silenceTimerRef = useRef<number | null>(null);
   
-  // Refs for performance optimization: buffer transcription updates and batch them.
-  const transcriptionBufferRef = useRef<string>('');
-  const animationFrameRef = useRef<number | null>(null);
-
   const cleanup = useCallback(() => {
     setIsListening(false);
-    setIsSilent(false);
-
-    // Cancel any pending animation frame to prevent state updates after cleanup
-    if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-    }
-    transcriptionBufferRef.current = '';
 
     if (sessionRef.current) {
         sessionRef.current.close();
@@ -107,37 +86,13 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
         audioContextRef.current.close().catch(console.error);
         audioContextRef.current = null;
     }
-    if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-    }
-  }, []);
-
-  const flushTranscriptionBuffer = useCallback(() => {
-    if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-    }
-    const bufferedText = transcriptionBufferRef.current;
-    if (bufferedText.length > 0) {
-        transcriptionBufferRef.current = '';
-        setText(prev => {
-            if (prev.endsWith(' ') || prev.length === 0 || bufferedText.startsWith(' ')) {
-                return prev + bufferedText;
-            }
-            return prev + ' ' + bufferedText;
-        });
-    }
   }, []);
 
   const stopListening = useCallback(() => {
     if (isListening) {
-      // First, ensure any buffered text is displayed
-      flushTranscriptionBuffer();
-      // Then, clean up all resources
       cleanup();
     }
-  }, [isListening, cleanup, flushTranscriptionBuffer]);
+  }, [isListening, cleanup]);
 
   const startListening = async () => {
     if (isListening) return;
@@ -146,17 +101,20 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
     setText('');
     setError(null);
     setIsListening(true);
-    setIsSilent(false);
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-      // Cast to 'any' to allow for vendor-prefixed AudioContext.
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
-      // FIX: Explicitly resume the audio context to ensure it starts immediately.
       await audioContextRef.current.resume();
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Explicitly request the sample rate and channel count the API requires.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+        }
+      });
       streamRef.current = stream;
 
       const sessionPromise = ai.live.connect({
@@ -165,69 +123,37 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
           onopen: () => {
             console.log('Live session opened.');
             if (!audioContextRef.current || audioContextRef.current.state === 'closed' || !streamRef.current) {
-                console.warn("AudioContext closed before live session could open. Aborting setup.");
+                console.warn("Audio resources were released before the session could open. Aborting setup.");
                 sessionPromise.then(session => session.close());
                 return;
             }
             
             sourceRef.current = audioContextRef.current.createMediaStreamSource(streamRef.current);
-            // Using the deprecated but highly reliable ScriptProcessorNode for stability.
-            // Buffer size of 2048 gives ~128ms latency, a good balance of responsiveness and reliability.
-            const processor = audioContextRef.current.createScriptProcessor(2048, 1, 1);
+            // Use a 4096 buffer size for stability, matching official examples. This gives ~256ms of audio per chunk.
+            const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
             processorRef.current = processor;
 
             processor.onaudioprocess = (audioProcessingEvent) => {
                 const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-                const { pcmBlob, rms } = processAudioData(inputData);
+                const pcmBlob = processAudioData(inputData);
 
-                // --- Silence Detection Logic ---
-                const SILENCE_THRESHOLD = 0.01;
-                if (rms < SILENCE_THRESHOLD) {
-                    if (silenceTimerRef.current === null) {
-                        silenceTimerRef.current = window.setTimeout(() => {
-                            setIsSilent(true);
-                        }, 3000);
-                    }
-                } else {
-                    setIsSilent(false);
-                    if (silenceTimerRef.current !== null) {
-                        clearTimeout(silenceTimerRef.current);
-                        silenceTimerRef.current = null;
-                    }
-                }
-
-                // --- Audio Sending ---
-                // Use the promise to ensure the session is ready before sending data
+                // Use the promise to ensure the session is ready before sending data.
                 sessionPromise.then((session) => {
                     session.sendRealtimeInput({ media: pcmBlob });
+                }).catch(err => {
+                    console.error("Failed to send audio data to a resolved session:", err);
                 });
             };
             
-            // Connect the audio graph. The processor must be connected to the destination to work.
             sourceRef.current.connect(processor);
             processor.connect(audioContextRef.current.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
               const newText = message.serverContent.inputTranscription.text;
-              transcriptionBufferRef.current += newText;
-
-              // Use requestAnimationFrame to batch updates and sync with browser repaint
-              if (animationFrameRef.current === null) {
-                animationFrameRef.current = requestAnimationFrame(() => {
-                  const bufferedText = transcriptionBufferRef.current;
-                  if (bufferedText.length > 0) {
-                      transcriptionBufferRef.current = ''; // Clear buffer before setting state
-                      setText(prev => {
-                        // Combine the previous text with the buffered updates
-                        if (prev.endsWith(' ') || prev.length === 0 || bufferedText.startsWith(' ')) {
-                            return prev + bufferedText;
-                        }
-                        return prev + ' ' + bufferedText;
-                      });
-                  }
-                  animationFrameRef.current = null;
-                });
+              if (newText) {
+                // Directly append new transcription text. This is simpler and more reliable.
+                setText(prevText => prevText + newText);
               }
             }
           },
@@ -238,16 +164,15 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
           },
           onclose: (e: CloseEvent) => {
             console.log('Live session closed.');
-            // Cleanup is called to ensure resources are released, even if closed unexpectedly.
-            cleanup();
+            cleanup(); // Ensure all resources are released on close.
           },
         },
         config: {
-          responseModalities: [Modality.AUDIO],
+          responseModalities: [Modality.AUDIO], // Required by the Live API
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
-          inputAudioTranscription: {},
+          inputAudioTranscription: {}, // Enable transcription of user's audio
         },
       });
 
@@ -255,7 +180,11 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
 
     } catch (error) {
       console.error('Failed to start listening:', error);
-      setError('Could not access the microphone.');
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        setError('Microphone permission denied.');
+      } else {
+        setError('Could not access the microphone.');
+      }
       cleanup();
     }
   };
@@ -278,7 +207,6 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
   const getPromptText = () => {
     if (error) return <span className="text-red-400">{error}</span>;
     if (isListening) {
-      if (isSilent) return "I can't hear you clearly. Please speak up, move to a quieter place, or type your entry.";
       return "I'm listening. Speak naturally about your day...";
     }
     return "Tap the icon to start speaking, or type your entry below.";
@@ -303,11 +231,11 @@ const NewEntryScreen: React.FC<NewEntryScreenProps> = ({ setAppState, setFinalTr
       </div>
 
       <div className="relative flex items-center justify-center">
-        {isListening && !isSilent && (
-            <div className="absolute w-48 h-48 rounded-full bg-cyan-500/10 animate-ping"></div>
-        )}
-         {isListening && !isSilent && (
-            <div className="absolute w-32 h-32 rounded-full bg-cyan-500/20 animate-pulse"></div>
+        {isListening && (
+            <>
+              <div className="absolute w-48 h-48 rounded-full bg-cyan-500/10 animate-ping"></div>
+              <div className="absolute w-32 h-32 rounded-full bg-cyan-500/20 animate-pulse"></div>
+            </>
         )}
         <button
           onClick={isListening ? stopListening : startListening}
