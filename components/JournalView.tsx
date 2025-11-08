@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { JournalEntry, ImageAnalysisResult } from '../types';
-import { SymptomIcon, MoodIcon, FoodIcon, ExerciseIcon, PaperClipIcon, PhotoIcon, XIcon, FireIcon, DropletIcon } from './icons';
+import { SymptomIcon, MoodIcon, FoodIcon, ExerciseIcon, PaperClipIcon, PhotoIcon, XIcon, FireIcon, DropletIcon, DotsVerticalIcon } from './icons';
 
 // Props for the main view component
 interface JournalViewProps {
@@ -126,7 +126,7 @@ const JournalCard: React.FC<JournalCardProps> = ({ entry, isUpdating, onFileSele
             />
             {isUpdating ? (
                  <div className="flex items-center justify-center mt-auto pt-3">
-                    <svg className="animate-spin h-5 w-5 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <svg className="animate-spin h-5 w-5 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                     <span className="ml-2 text-sm text-slate-400">Analyzing...</span>
                 </div>
             ) : (
@@ -152,6 +152,69 @@ const JournalCard: React.FC<JournalCardProps> = ({ entry, isUpdating, onFileSele
 
 const JournalView: React.FC<JournalViewProps> = ({ journalEntries, onAttachImage }) => {
     const [updatingEntryId, setUpdatingEntryId] = useState<string | null>(null);
+    const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+    const [selectedSymptom, setSelectedSymptom] = useState<string>('');
+    const [selectedMood, setSelectedMood] = useState<string>('');
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    const allSymptoms = useMemo(() => {
+        const symptoms = new Set<string>();
+        journalEntries.forEach(entry => {
+            entry.summary.physicalSymptoms?.forEach(symptom => {
+                if(symptom && typeof symptom === 'string') symptoms.add(symptom);
+            });
+        });
+        return Array.from(symptoms).sort();
+    }, [journalEntries]);
+
+    const allMoods = useMemo(() => {
+        const moods = new Set<string>();
+        journalEntries.forEach(entry => {
+            entry.summary.moods?.forEach(mood => {
+                if(mood && typeof mood === 'string') moods.add(mood);
+            });
+        });
+        return Array.from(moods).sort();
+    }, [journalEntries]);
+
+    const filteredAndSortedEntries = useMemo(() => {
+        let entries = [...journalEntries];
+
+        if (selectedSymptom) {
+            entries = entries.filter(entry => entry.summary.physicalSymptoms?.includes(selectedSymptom));
+        }
+        if (selectedMood) {
+            entries = entries.filter(entry => entry.summary.moods?.includes(selectedMood));
+        }
+
+        entries.sort((a, b) => {
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+        });
+
+        return entries;
+    }, [journalEntries, sortOrder, selectedSymptom, selectedMood]);
+
+    const handleResetFilters = () => {
+        setSelectedSymptom('');
+        setSelectedMood('');
+        setIsMenuOpen(false);
+    };
 
     const handleFileSelect = async (entryId: string, file: File) => {
         if (!file) return;
@@ -167,17 +230,75 @@ const JournalView: React.FC<JournalViewProps> = ({ journalEntries, onAttachImage
         reader.readAsDataURL(file);
     };
     
-    const sortedEntries = [...journalEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const isFilterActive = selectedSymptom || selectedMood;
+
   return (
     <div className="p-4 sm:p-6 pb-24 text-white overflow-y-auto h-full">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold text-cyan-300">Journal</h1>
-        <p className="text-slate-400">Your past entries.</p>
+      <header className="mb-6 flex items-center justify-between relative">
+        <div>
+            <h1 className="text-3xl font-bold text-cyan-300">Journal</h1>
+            <p className="text-slate-400">Your past entries.</p>
+        </div>
+        <div className="relative" ref={menuRef}>
+            <button 
+                onClick={() => setIsMenuOpen(!isMenuOpen)} 
+                className="p-2 rounded-full hover:bg-slate-700/50 transition-colors"
+                aria-label="Open filter menu"
+            >
+                <DotsVerticalIcon className="w-6 h-6 text-slate-300" />
+            </button>
+            {isMenuOpen && (
+                <div className="absolute top-full right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 p-4 space-y-4">
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-400 mb-2">Sort By</h3>
+                        <div className="flex gap-2 text-sm">
+                            <button onClick={() => setSortOrder('desc')} className={`flex-1 py-1 rounded-md ${sortOrder === 'desc' ? 'bg-cyan-500 text-white' : 'bg-slate-700 hover:bg-slate-600'}`}>Newest</button>
+                            <button onClick={() => setSortOrder('asc')} className={`flex-1 py-1 rounded-md ${sortOrder === 'asc' ? 'bg-cyan-500 text-white' : 'bg-slate-700 hover:bg-slate-600'}`}>Oldest</button>
+                        </div>
+                    </div>
+                    <hr className="border-slate-700" />
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-400 mb-2">Filter By</h3>
+                        <div className="space-y-3">
+                            <select
+                                value={selectedSymptom}
+                                onChange={(e) => setSelectedSymptom(e.target.value)}
+                                className="w-full appearance-none bg-slate-700/80 border border-transparent rounded-md py-2 px-3 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition text-sm"
+                                aria-label="Filter by Symptom"
+                            >
+                                <option value="">Filter by Symptom</option>
+                                {allSymptoms.map(symptom => <option key={symptom} value={symptom}>{symptom}</option>)}
+                            </select>
+                             <select
+                                value={selectedMood}
+                                onChange={(e) => setSelectedMood(e.target.value)}
+                                className="w-full appearance-none bg-slate-700/80 border border-transparent rounded-md py-2 px-3 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition text-sm"
+                                aria-label="Filter by Mood"
+                            >
+                                <option value="">Filter by Mood</option>
+                                {allMoods.map(mood => <option key={mood} value={mood}>{mood}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                     {isFilterActive && (
+                        <>
+                            <hr className="border-slate-700" />
+                            <button
+                                onClick={handleResetFilters}
+                                className="w-full text-center py-2 bg-red-500/20 text-red-400 rounded-md hover:bg-red-500/40 transition-colors text-sm font-semibold"
+                            >
+                                Reset Filters
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
       </header>
 
-      {sortedEntries.length > 0 ? (
+      {filteredAndSortedEntries.length > 0 ? (
         <div className="space-y-4">
-            {sortedEntries.map(entry => (
+            {filteredAndSortedEntries.map(entry => (
                 <JournalCard 
                   key={entry.id} 
                   entry={entry}
@@ -188,7 +309,7 @@ const JournalView: React.FC<JournalViewProps> = ({ journalEntries, onAttachImage
         </div>
       ) : (
         <div className="text-center py-16">
-            <p className="text-slate-500">You haven't saved any journal entries yet.</p>
+            <p className="text-slate-500">{isFilterActive ? "No entries match your filters." : "You haven't saved any journal entries yet."}</p>
         </div>
       )}
     </div>
