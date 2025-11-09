@@ -62,11 +62,18 @@ const JournalCard: React.FC<JournalCardProps> = ({ entry, isUpdating, onFileSele
     if (flareUpRisk > 66) riskColor = 'border-red-500/50';
     else if (flareUpRisk > 33) riskColor = 'border-yellow-500/50';
 
-    const formattedDate = new Date(date).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-    });
+    const formattedDateTime = useMemo(() => {
+        const d = new Date(date);
+        return d.toLocaleString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+    }, [date]);
+
 
     const handleAttachClick = () => {
         fileInputRef.current?.click();
@@ -82,7 +89,7 @@ const JournalCard: React.FC<JournalCardProps> = ({ entry, isUpdating, onFileSele
     return (
         <div className={`bg-slate-800/50 rounded-lg p-4 border-l-4 ${riskColor} flex flex-col`}>
             <div className="flex justify-between items-start mb-3">
-                <p className="text-sm font-semibold text-slate-400">{formattedDate}</p>
+                <p className="text-sm font-semibold text-slate-400">{formattedDateTime}</p>
                 <div className="flex items-center gap-3">
                     <div className="text-center">
                         <p className="text-xs text-slate-500">Wellness</p>
