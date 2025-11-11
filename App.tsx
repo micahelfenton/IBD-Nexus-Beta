@@ -115,7 +115,11 @@ const MenuScannerScreen: React.FC<MenuScannerScreenProps> = ({ userProfile, onBa
             const result = await analyzeMenu(image, userProfile);
             setAnalysisResult(result);
         } catch (err) {
-            setError("Failed to analyze the menu. Please try again.");
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("Failed to analyze the menu. Please try again.");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -163,7 +167,7 @@ const MenuScannerScreen: React.FC<MenuScannerScreenProps> = ({ userProfile, onBa
                 </div>
             ) : error ? (
                 <div className="flex flex-col items-center justify-center flex-grow text-center">
-                   <p className="text-red-400">{error}</p>
+                   <p className="text-red-400 max-w-sm">{error}</p>
                    <button onClick={handleScanAgain} className="mt-4 px-4 py-2 bg-cyan-500 rounded-lg font-semibold hover:bg-cyan-400">Scan Again</button>
                 </div>
             ) : (

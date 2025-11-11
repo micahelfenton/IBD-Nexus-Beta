@@ -280,6 +280,10 @@ const menuAnalysisSchema = {
                 },
                 required: ['itemName', 'risk', 'reason', 'boundingBox']
             }
+        },
+        error: { 
+            type: Type.STRING, 
+            description: "An error message if the image is unreadable. If the image is readable, this key should not be present."
         }
     },
     required: ['items']
@@ -307,24 +311,28 @@ export async function analyzeMenu(base64Image: string, profile: UserDietaryProfi
 
         **CRITICAL INSTRUCTIONS - FOLLOW THIS PROCESS EXACTLY:**
 
-        1.  **MENTAL SCAN**: First, visually scan the entire image to identify logical text blocks that represent individual menu items. A "menu item" includes its name AND its description, which might span multiple lines.
+        1.  **IMAGE QUALITY CHECK**: Before performing any analysis, assess the image quality. Is the text blurry, out of focus, poorly lit, or otherwise unreadable?
+            *   **If the image is UNREADABLE:** You MUST return a JSON object where the 'items' array is empty and you include a top-level 'error' key. It should look like this: \`{"items": [], "error": "Image is too blurry or poorly lit to read accurately. Please provide a clearer, more focused image."}\`. Do NOT attempt to guess any menu items.
+            *   **If the image is READABLE:** Proceed with the analysis and do NOT include the 'error' key.
 
-        2.  **ONE ITEM AT A TIME**: Process each identified menu item individually. Do not try to process them all at once.
+        2.  **MENTAL SCAN**: First, visually scan the entire image to identify logical text blocks that represent individual menu items. A "menu item" includes its name AND its description, which might span multiple lines.
 
-        3.  **FOR EACH ITEM - GENERATE THE BOUNDING BOX**:
+        3.  **ONE ITEM AT A TIME**: Process each identified menu item individually. Do not try to process them all at once.
+
+        4.  **FOR EACH ITEM - GENERATE THE BOUNDING BOX**:
             *   **Step A: Find the Text Boundaries.** Identify the absolute top, bottom, left, and right extents of the text for this single item.
             *   **Step B: Create the Tightest Possible Box.** The bounding box coordinates MUST tightly enclose ONLY the text. There should be almost zero padding.
             *   **Step C: ABSOLUTELY IGNORE NON-TEXT.** Your bounding box must NOT include page spirals, lines on the paper, illustrations, or large gaps between the item and the next. This is a critical failure point. If you see a spiral binding, your box must stop before it.
             *   **Step D: SELF-CORRECT.** Look at your generated box. Is it too wide? Is it too tall? Does it include the spiral? If so, shrink it until it ONLY covers the text pixels.
 
-        4.  **FOR EACH ITEM - PERFORM RISK ANALYSIS**:
+        5.  **FOR EACH ITEM - PERFORM RISK ANALYSIS**:
             *   Read the text inside your perfect bounding box.
             *   Infer ingredients (e.g., "Fried Chicken" implies high fat and likely wheat flour).
             *   Assign a risk ("safe", "caution", "avoid") based on the user's restrictions.
             *   Provide a concise reason for the risk.
             *   For "caution" items, provide an actionable suggestion (e.g., "Ask for grilled instead of fried").
 
-        5.  **FINALIZE JSON**: Compile the results for all items into a single JSON object that strictly adheres to the schema. The accuracy of your bounding boxes is the most important part of this task. Do not fail on this point.
+        6.  **FINALIZE JSON**: Compile the results for all items into a single JSON object that strictly adheres to the schema. The accuracy of your bounding boxes is the most important part of this task. Do not fail on this point.
     `;
 
     try {
@@ -337,10 +345,17 @@ export async function analyzeMenu(base64Image: string, profile: UserDietaryProfi
             },
         });
         const jsonText = response.text.trim();
-        return JSON.parse(jsonText) as MenuAnalysisResult;
+        const result = JSON.parse(jsonText) as MenuAnalysisResult & { error?: string };
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        return result;
     } catch (error) {
         console.error('Error analyzing menu:', error);
-        return { items: [] };
+        if (error instanceof Error) {
+            throw error;
+        }
+        throw new Error('An unexpected error occurred during menu analysis.');
     }
 }
 
@@ -359,6 +374,10 @@ const ingredientAnalysisSchema = {
                 },
                 required: ['ingredientName', 'risk', 'reason']
             }
+        },
+        error: { 
+            type: Type.STRING, 
+            description: "An error message if the image is unreadable. If the image is readable, this key should not be present."
         }
     },
     required: ['ingredients']
@@ -387,18 +406,22 @@ export async function analyzeIngredients(base64Image: string, profile: UserDieta
 
         **CRITICAL INSTRUCTIONS:**
 
-        1.  **OCR and Extraction**: The text will be small. Perform high-accuracy OCR to read the ingredients list. Ingredients are typically listed after a keyword like "Ingredients:". Extract every single ingredient from this list. Be meticulous in parsing comma-separated items and items within parentheses.
+        1.  **IMAGE QUALITY CHECK**: First, assess the image quality. Is the ingredients list text blurry, out of focus, poorly lit, or otherwise unreadable?
+            *   **If the image is UNREADABLE:** You MUST return a JSON object with an empty 'ingredients' array and a top-level 'error' key. It should look like this: \`{"ingredients": [], "error": "Image quality is too low to read the ingredients list. Please provide a clearer image without glare or blur."}\`. Do NOT attempt to guess any ingredients.
+            *   **If the image is READABLE:** Proceed with the analysis and do NOT include the 'error' key.
 
-        2.  **User Profile Analysis**: Analyze each extracted ingredient against the user's dietary profile: ${dietaryRestrictions.join(', ')}.
+        2.  **OCR and Extraction**: The text will be small. Perform high-accuracy OCR to read the ingredients list. Ingredients are typically listed after a keyword like "Ingredients:". Extract every single ingredient from this list. Be meticulous in parsing comma-separated items and items within parentheses.
 
-        3.  **Risk Classification**: For each ingredient, assign a risk level:
+        3.  **User Profile Analysis**: Analyze each extracted ingredient against the user's dietary profile: ${dietaryRestrictions.join(', ')}.
+
+        4.  **Risk Classification**: For each ingredient, assign a risk level:
             *   **'red' (Avoid)**: The ingredient is a known major trigger or directly conflicts with the user's profile (e.g., 'milk' if user avoids dairy, 'chili powder' if user avoids spicy).
             *   **'amber' (Caution)**: The ingredient could be problematic for some people with IBD or depending on quantity (e.g., 'inulin' as a fiber source, 'natural flavors' which can be ambiguous, high-fat oils).
             *   **'green' (Safe)**: The ingredient is generally considered safe and well-tolerated for IBD (e.g., 'salt', 'rice flour', 'water').
 
-        4.  **Provide a Reason**: For every ingredient, provide a concise, clear reason for its classification. For 'red' and 'amber', explain why it's a risk. For 'green', briefly state why it's likely safe (e.g., "Generally well-tolerated").
+        5.  **Provide a Reason**: For every ingredient, provide a concise, clear reason for its classification. For 'red' and 'amber', explain why it's a risk. For 'green', briefly state why it's likely safe (e.g., "Generally well-tolerated").
 
-        5.  **Finalize JSON**: Compile the results for all identified ingredients into a single JSON object that strictly adheres to the provided schema. If you cannot read any ingredients, return an empty array.
+        6.  **Finalize JSON**: Compile the results for all identified ingredients into a single JSON object that strictly adheres to the provided schema. If you cannot read any ingredients, return an empty array.
     `;
     
     try {
@@ -411,9 +434,16 @@ export async function analyzeIngredients(base64Image: string, profile: UserDieta
             },
         });
         const jsonText = response.text.trim();
-        return JSON.parse(jsonText) as IngredientAnalysisResult;
+        const result = JSON.parse(jsonText) as IngredientAnalysisResult & { error?: string };
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        return result;
     } catch (error) {
         console.error('Error analyzing ingredients:', error);
-        return { ingredients: [] };
+        if (error instanceof Error) {
+            throw error;
+        }
+        throw new Error('An unexpected error occurred during ingredient analysis.');
     }
 }

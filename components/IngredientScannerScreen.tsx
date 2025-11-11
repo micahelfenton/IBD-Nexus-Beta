@@ -64,8 +64,11 @@ const IngredientScannerScreen: React.FC<IngredientScannerScreenProps> = ({ userP
             const result = await analyzeIngredients(image, userProfile);
             setAnalysisResult(result);
         } catch (err) {
-            setError("Failed to analyze the ingredients. Please try again.");
-            console.error(err);
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("Failed to analyze the ingredients. Please try again.");
+            }
         } finally {
             setIsLoading(false);
         }
@@ -113,7 +116,7 @@ const IngredientScannerScreen: React.FC<IngredientScannerScreenProps> = ({ userP
                 </div>
             ) : error ? (
                 <div className="flex flex-col items-center justify-center flex-grow text-center">
-                   <p className="text-red-400">{error}</p>
+                   <p className="text-red-400 max-w-sm">{error}</p>
                    <button onClick={handleScanAgain} className="mt-4 px-4 py-2 bg-cyan-500 rounded-lg font-semibold hover:bg-cyan-400">Scan Again</button>
                 </div>
             ) : (
