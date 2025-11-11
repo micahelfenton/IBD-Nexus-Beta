@@ -32,23 +32,24 @@ const FoodListItem: React.FC<{ food: FoodStat }> = ({ food }) => {
       </div>
       <div className="text-right text-sm">
         <p className="text-slate-300">{goodDayPercentage}% Symptom-Free</p>
-        <p className="text-slate-500">Eaten {food.total} time{food.total > 1 ? 's' : ''}</p>
+        <p className="text-slate-500">{food.goodDays} good, {food.badDays} bad day{food.badDays !== 1 ? 's' : ''}</p>
       </div>
     </li>
   );
 };
 
 const DietScreen: React.FC<DietScreenProps> = ({ journalEntries, onBack }) => {
-  const foodAnalysis = useMemo(() => {
+  const { foodAnalysis, uniqueFoodCount } = useMemo(() => {
     const foodStats: Record<string, { goodDays: number; badDays: number; total: number }> = {};
-    const MINIMUM_ENTRIES = 3; // Minimum journal entries to show the analysis
+    const MINIMUM_ENTRIES = 3;
 
-    if (journalEntries.length < MINIMUM_ENTRIES) {
-        return null;
+    const entriesWithFood = journalEntries.filter(e => e.summary.foodEaten && e.summary.foodEaten.length > 0);
+
+    if (entriesWithFood.length < MINIMUM_ENTRIES) {
+        return { foodAnalysis: null, uniqueFoodCount: 0 };
     }
 
-    journalEntries.forEach(entry => {
-      // Heuristic to determine if it was a "bad day"
+    entriesWithFood.forEach(entry => {
       const isBadDay =
         (entry.summary.flareUpRisk ?? 0) > 50 ||
         entry.summary.bloodInStool === true ||
@@ -81,11 +82,10 @@ const DietScreen: React.FC<DietScreenProps> = ({ journalEntries, onBack }) => {
       trigger: [],
     };
     
-    // Minimum times a food must be eaten to be categorized.
     const MINIMUM_OCCURRENCES = 2;
 
     Object.entries(foodStats).forEach(([name, stats]) => {
-      if (stats.total < MINIMUM_OCCURRENCES) return; // Skip foods eaten only once
+      if (stats.total < MINIMUM_OCCURRENCES) return;
 
       const goodRatio = stats.goodDays / stats.total;
       let status: 'safe' | 'caution' | 'trigger';
@@ -93,22 +93,24 @@ const DietScreen: React.FC<DietScreenProps> = ({ journalEntries, onBack }) => {
       if (goodRatio >= 0.8) {
         status = 'safe';
       } else if (goodRatio >= 0.4) {
-        status = 'caution';
-      } else {
         status = 'trigger';
+      } else {
+        status = 'caution';
       }
-
+      
       const foodStat: FoodStat = { name, ...stats, status };
-
       categorizedFoods[status].push(foodStat);
     });
     
-    // Sort each category for consistency (most eaten first)
     categorizedFoods.safe.sort((a,b) => b.total - a.total);
     categorizedFoods.caution.sort((a,b) => b.total - a.total);
     categorizedFoods.trigger.sort((a,b) => b.total - a.total);
 
-    return categorizedFoods;
+    return { foodAnalysis: categorizedFoods, uniqueFoodCount: Object.keys(foodStats).length };
+  }, [journalEntries]);
+  
+  const entriesWithFoodCount = useMemo(() => {
+      return journalEntries.filter(e => e.summary.foodEaten && e.summary.foodEaten.length > 0).length;
   }, [journalEntries]);
 
   return (
@@ -123,11 +125,16 @@ const DietScreen: React.FC<DietScreenProps> = ({ journalEntries, onBack }) => {
         </div>
       </header>
 
+      {foodAnalysis && (
+        <div className="mb-6 text-center text-sm text-slate-400 bg-slate-800/30 p-3 rounded-lg">
+            <p>Analyzing <span className="font-bold text-cyan-400">{entriesWithFoodCount}</span> journal entries and <span className="font-bold text-cyan-400">{uniqueFoodCount}</span> unique food items to find your patterns.</p>
+        </div>
+      )}
 
       {!foodAnalysis || (foodAnalysis.safe.length === 0 && foodAnalysis.caution.length === 0 && foodAnalysis.trigger.length === 0) ? (
         <div className="text-center py-16 bg-slate-800/50 rounded-lg">
           <p className="text-slate-400">Not enough data yet.</p>
-          <p className="text-slate-500 text-sm mt-1">Log more journal entries with what you ate to see insights here.</p>
+          <p className="text-slate-500 text-sm mt-1">You need at least 3 journal entries that mention food to generate insights.</p>
         </div>
       ) : (
         <div className="space-y-8">

@@ -311,9 +311,9 @@ export async function analyzeMenu(base64Image: string, profile: UserDietaryProfi
 
         **CRITICAL INSTRUCTIONS - FOLLOW THIS PROCESS EXACTLY:**
 
-        1.  **IMAGE QUALITY CHECK**: Before performing any analysis, assess the image quality. Is the text blurry, out of focus, poorly lit, or otherwise unreadable?
-            *   **If the image is UNREADABLE:** You MUST return a JSON object where the 'items' array is empty and you include a top-level 'error' key. It should look like this: \`{"items": [], "error": "Image is too blurry or poorly lit to read accurately. Please provide a clearer, more focused image."}\`. Do NOT attempt to guess any menu items.
-            *   **If the image is READABLE:** Proceed with the analysis and do NOT include the 'error' key.
+        1.  **IMAGE QUALITY CHECK (CRITICAL):** Your first step is to assess the image quality. The user's safety depends on this.
+            *   **If the text is SEVERELY OBSCURED** (e.g., extremely blurry, heavy glare, too dark) to the point where you cannot be confident about most of the words, you MUST return an error. Do not guess. The error JSON should be: \`{"items": [], "error": "could not scan image properly try making it more in focus or take out of harsh lighting"}\`.
+            *   **If the text is CHALLENGING BUT LARGELY LEGIBLE** (e.g., slightly out of focus, minor glare), make your best effort to analyze it. Prioritize accuracy over completeness. If you are not confident about a specific item, it is better to omit it than to guess incorrectly. If you are reasonably confident, proceed. Do NOT include the 'error' key in this case.
 
         2.  **MENTAL SCAN**: First, visually scan the entire image to identify logical text blocks that represent individual menu items. A "menu item" includes its name AND its description, which might span multiple lines.
 
@@ -406,9 +406,9 @@ export async function analyzeIngredients(base64Image: string, profile: UserDieta
 
         **CRITICAL INSTRUCTIONS:**
 
-        1.  **IMAGE QUALITY CHECK**: First, assess the image quality. Is the ingredients list text blurry, out of focus, poorly lit, or otherwise unreadable?
-            *   **If the image is UNREADABLE:** You MUST return a JSON object with an empty 'ingredients' array and a top-level 'error' key. It should look like this: \`{"ingredients": [], "error": "Image quality is too low to read the ingredients list. Please provide a clearer image without glare or blur."}\`. Do NOT attempt to guess any ingredients.
-            *   **If the image is READABLE:** Proceed with the analysis and do NOT include the 'error' key.
+        1.  **IMAGE QUALITY CHECK (CRITICAL):** Your first step is to assess the image quality. User safety is paramount.
+            *   **If the ingredients list is SEVERELY OBSCURED** (e.g., extremely blurry, heavy glare, unreadably small) where you cannot confidently identify the majority of ingredients, you MUST return an error. Do not guess. The error JSON should be: \`{"ingredients": [], "error": "could not scan image properly try making it more in focus or take out of harsh lighting"}\`.
+            *   **If the text is CHALLENGING BUT LARGELY LEGIBLE** (e.g., slightly out of focus, minor glare), make your best effort to perform OCR and analysis. Accuracy is more important than identifying every single word. If you cannot confidently read an ingredient, it is better to omit it than to guess. If you are reasonably confident, proceed. Do NOT include the 'error' key in this case.
 
         2.  **OCR and Extraction**: The text will be small. Perform high-accuracy OCR to read the ingredients list. Ingredients are typically listed after a keyword like "Ingredients:". Extract every single ingredient from this list. Be meticulous in parsing comma-separated items and items within parentheses.
 

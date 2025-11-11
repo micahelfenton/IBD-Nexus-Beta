@@ -67,9 +67,10 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
         const foodStats: Record<string, { goodDays: number; badDays: number; total: number }> = {};
         const MINIMUM_ENTRIES = 3;
 
-        if (journalEntries.length < MINIMUM_ENTRIES) return { topSafeFood: null, topTriggerFood: null, hasEnoughData: false };
+        const entriesWithFood = journalEntries.filter(e => e.summary.foodEaten && e.summary.foodEaten.length > 0);
+        if (entriesWithFood.length < MINIMUM_ENTRIES) return { topSafeFood: null, topTriggerFood: null, hasEnoughData: false };
 
-        journalEntries.forEach(entry => {
+        entriesWithFood.forEach(entry => {
             const isBadDay = (entry.summary.flareUpRisk ?? 0) > 50 || entry.summary.bloodInStool === true || (entry.summary.crampsSeverity ?? 0) >= 5 || entry.summary.stoolType === 'Diarrhea' || entry.summary.physicalSymptoms.some(s => /pain|cramp|bloat|nausea|diarrhea/i.test(s));
             entry.summary.foodEaten.forEach(foodItem => {
                 const normalizedFood = foodItem.toLowerCase().trim();
@@ -120,7 +121,7 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
                 </div>
                 <p className="text-right text-xs text-cyan-400 mt-4 font-semibold">View Full Report &rarr;</p></>
             ) : (
-                <p className="text-slate-400 text-sm">Log more entries with food details to unlock dietary insights.</p>
+                <p className="text-slate-400 text-sm">Log at least 3 entries with food details to see your top safe foods and potential triggers.</p>
             )}
         </div>
     );
