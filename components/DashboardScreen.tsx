@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { JournalEntry } from '../types';
-import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon } from './icons';
+import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon, FireIcon } from './icons';
 
 interface DashboardScreenProps {
   journalEntries: JournalEntry[];
@@ -130,6 +130,43 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner, onNavigateToIngredientScanner }) => {
     const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
 
+    const streak = useMemo(() => {
+        if (journalEntries.length === 0) return 0;
+
+        const getDayNumber = (date: Date) => {
+            const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            return Math.floor(startOfDay.getTime() / (1000 * 60 * 60 * 24));
+        };
+
+        const entryDayNumbers = new Set(
+            journalEntries.map(entry => getDayNumber(new Date(entry.date)))
+        );
+
+        const sortedDayNumbers = Array.from(entryDayNumbers).sort((a, b) => b - a);
+
+        const todayDayNumber = getDayNumber(new Date());
+        
+        // Check if the most recent entry is today or yesterday
+        if (sortedDayNumbers[0] < todayDayNumber - 1) {
+            return 0; // Streak is broken
+        }
+
+        let currentStreak = 0;
+        // Start checking from the most recent entry day.
+        let expectedDayNumber = sortedDayNumbers[0];
+
+        for (const dayNumber of sortedDayNumbers) {
+            if (dayNumber === expectedDayNumber) {
+                currentStreak++;
+                expectedDayNumber--;
+            } else {
+                break; // Gap in days, streak is broken
+            }
+        }
+
+        return currentStreak;
+    }, [journalEntries]);
+
     const filteredEntries = useMemo(() => {
         const days = timePeriod === '7d' ? 7 : 30;
         const cutoffDate = new Date();
@@ -183,7 +220,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
     return (
         <div className="p-4 sm:p-6 pb-24 text-white overflow-y-auto h-full">
             <header className="mb-4">
-                <h1 className="text-3xl font-bold text-cyan-300">Dashboard</h1>
+                <div className="flex items-center justify-between">
+                    <h1 className="text-3xl font-bold text-cyan-300">Dashboard</h1>
+                    {streak > 0 && (
+                        <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-full" title={`${streak}-day logging streak!`}>
+                            <FireIcon className="w-5 h-5 text-orange-400 glow-yellow" />
+                            <span className="font-bold text-white text-lg">{streak}</span>
+                        </div>
+                    )}
+                </div>
                 <p className="text-slate-400">Your personalized wellness overview.</p>
             </header>
             
