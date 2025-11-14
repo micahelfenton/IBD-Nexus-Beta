@@ -204,3 +204,15 @@ export const IngredientScannerIcon: React.FC<IconProps> = (props) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 13h5" />
     </svg>
 );
+
+export const DocumentReportIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
+export const ShareIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.195.025.39.044.586.06.336.034.672.067 1.006.099m-1.592 2.027c.135.02.273.032.414.043.44.032.883.063 1.326.093m-1.74 2.012a5.25 5.25 0 01-1.286-1.033M11.25 4.5A5.25 5.25 0 0116.5 9.75m0 0a5.25 5.25 0 01-5.25 5.25m5.25-5.25v-2.25m0 2.25a5.25 5.25 0 005.25 5.25m-5.25-5.25c-.195-.025-.39-.044-.586-.06a21.745 21.745 0 00-1.006-.1M16.5 9.75c.195.025.39.044.586.06.336.034.672.067 1.006.099m-1.592-2.027c.135-.02.273-.032.414-.043.44-.032.883-.063 1.326-.093m-1.74-2.012a5.25 5.25 0 011.286 1.033M4.5 12a5.25 5.25 0 005.25 5.25m5.25-5.25a5.25 5.25 0 00-5.25 5.25m0-5.25a5.25 5.25 0 00-5.25-5.25m5.25 5.25c-.195-.025-.39-.044-.586-.06a21.745 21.745 0 00-1.006-.1m-4.214-2.262a5.25 5.25 0 011.286-1.033" />
+    </svg>
+);

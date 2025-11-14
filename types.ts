@@ -6,6 +6,7 @@ export enum AppScreen {
   TREND_ANALYSIS,
   MENU_SCANNER,
   INGREDIENT_SCANNER,
+  REPORT_GENERATOR,
 }
 
 export interface UserDietaryProfile {

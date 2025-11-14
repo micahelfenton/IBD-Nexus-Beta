@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { JournalEntry } from '../types';
-import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon, FireIcon } from './icons';
+import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon, FireIcon, DocumentReportIcon } from './icons';
 
 interface DashboardScreenProps {
   journalEntries: JournalEntry[];
@@ -8,6 +8,7 @@ interface DashboardScreenProps {
   onNavigateToTrendAnalysis: () => void;
   onNavigateToMenuScanner: () => void;
   onNavigateToIngredientScanner: () => void;
+  onNavigateToReportGenerator: () => void;
 }
 
 interface FoodStat {
@@ -17,6 +18,37 @@ interface FoodStat {
   total: number;
   status: 'safe' | 'caution' | 'trigger';
 }
+
+interface DashboardCardProps {
+  title: string;
+  icon: React.ReactNode;
+  onClick?: () => void;
+  children: React.ReactNode;
+  footerText?: string;
+  className?: string;
+}
+
+const DashboardCard: React.FC<DashboardCardProps> = ({ title, icon, onClick, children, footerText, className }) => {
+  return (
+    <div 
+      onClick={onClick} 
+      className={`bg-slate-800/50 rounded-lg p-4 flex flex-col hover:bg-slate-800 transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
+    >
+      <div className="flex-grow">
+        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2">
+          {icon}
+          {title}
+        </h2>
+        <div className="text-slate-400 text-sm">
+          {children}
+        </div>
+      </div>
+      {footerText && (
+        <p className="text-right text-xs text-cyan-400 mt-4 font-semibold">{footerText}</p>
+      )}
+    </div>
+  );
+};
 
 
 const WellnessGauge: React.FC<{ score: number }> = ({ score }) => {
@@ -62,7 +94,9 @@ const WellnessGauge: React.FC<{ score: number }> = ({ score }) => {
     );
 };
 
-const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () => void }> = ({ journalEntries, onClick }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner, onNavigateToIngredientScanner, onNavigateToReportGenerator }) => {
+    const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
+
     const dietInsightPreview = useMemo(() => {
         const foodStats: Record<string, { goodDays: number; badDays: number; total: number }> = {};
         const MINIMUM_ENTRIES = 3;
@@ -71,7 +105,8 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
         if (entriesWithFood.length < MINIMUM_ENTRIES) return { topSafeFood: null, topTriggerFood: null, hasEnoughData: false };
 
         entriesWithFood.forEach(entry => {
-            const isBadDay = (entry.summary.flareUpRisk ?? 0) > 50 || entry.summary.bloodInStool === true || (entry.summary.crampsSeverity ?? 0) >= 5 || entry.summary.stoolType === 'Diarrhea' || entry.summary.physicalSymptoms.some(s => /pain|cramp|bloat|nausea|diarrhea/i.test(s));
+            // FIX: Since flareUpRisk is a required number, the nullish coalescing operator is unnecessary.
+            const isBadDay = (entry.summary.flareUpRisk) > 50 || entry.summary.bloodInStool === true || (entry.summary.crampsSeverity ?? 0) >= 5 || entry.summary.stoolType === 'Diarrhea' || entry.summary.physicalSymptoms.some(s => /pain|cramp|bloat|nausea|diarrhea/i.test(s));
             entry.summary.foodEaten.forEach(foodItem => {
                 const normalizedFood = foodItem.toLowerCase().trim();
                 if (!normalizedFood) return;
@@ -86,49 +121,20 @@ const DietInsightCard: React.FC<{ journalEntries: JournalEntry[], onClick: () =>
         const MINIMUM_OCCURRENCES = 2;
 
         Object.entries(foodStats).forEach(([name, stats]) => {
-            if (stats.total < MINIMUM_OCCURRENCES) return;
-            const goodRatio = stats.goodDays / stats.total;
+            // FIX: Cast stats to `any` and convert to Number to handle cases where the value might be a string (e.g., from localStorage) or unknown.
+            const statsAny = stats as any;
+            if (Number(statsAny.total) < MINIMUM_OCCURRENCES) return;
+            const goodRatio = Number(statsAny.goodDays) / Number(statsAny.total);
             let status: 'safe' | 'caution' | 'trigger' = goodRatio >= 0.8 ? 'safe' : (goodRatio >= 0.4 ? 'caution' : 'trigger');
-            categorizedFoods[status].push({ name, ...stats, status });
+            categorizedFoods[status].push({ name, ...statsAny, status });
         });
         
-        categorizedFoods.safe.sort((a,b) => b.total - a.total);
-        categorizedFoods.trigger.sort((a,b) => b.total - a.total);
+        // FIX: Explicitly convert sort properties to numbers to prevent type errors during arithmetic operations.
+        categorizedFoods.safe.sort((a,b) => Number(b.total) - Number(a.total));
+        categorizedFoods.trigger.sort((a,b) => Number(b.total) - Number(a.total));
 
         return { topSafeFood: categorizedFoods.safe[0] ?? null, topTriggerFood: categorizedFoods.trigger[0] ?? null, hasEnoughData: true };
     }, [journalEntries]);
-
-    return (
-        <div onClick={onClick} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1 md:col-span-1">
-            <h2 className="font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <DietIcon className="w-5 h-5 text-cyan-400" />
-                Dietary Insights
-            </h2>
-            {dietInsightPreview.hasEnoughData ? (
-                 <><div className="space-y-2 text-sm">
-                    <div>
-                        <p className="text-xs text-slate-500 mb-1">Top Safe Food</p>
-                        {dietInsightPreview.topSafeFood ? (
-                            <span className="bg-green-500/20 text-green-300 px-2 py-1 rounded capitalize font-medium">{dietInsightPreview.topSafeFood.name}</span>
-                        ) : (<p className="text-slate-400 text-xs italic">Not enough data</p>)}
-                    </div>
-                    <div>
-                        <p className="text-xs text-slate-500 mb-1">Top Potential Trigger</p>
-                        {dietInsightPreview.topTriggerFood ? (
-                            <span className="bg-red-500/20 text-red-300 px-2 py-1 rounded capitalize font-medium">{dietInsightPreview.topTriggerFood.name}</span>
-                        ) : (<p className="text-slate-400 text-xs italic">No triggers found yet</p>)}
-                    </div>
-                </div>
-                <p className="text-right text-xs text-cyan-400 mt-4 font-semibold">View Full Report &rarr;</p></>
-            ) : (
-                <p className="text-slate-400 text-sm">Log at least 3 entries with food details to see your top safe foods and potential triggers.</p>
-            )}
-        </div>
-    );
-};
-
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner, onNavigateToIngredientScanner }) => {
-    const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
 
     const streak = useMemo(() => {
         if (journalEntries.length === 0) return 0;
@@ -197,8 +203,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         const sorted = [...filteredEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const firstHalf = sorted.slice(0, Math.floor(sorted.length / 2));
         const secondHalf = sorted.slice(Math.floor(sorted.length / 2));
-        const avgFirst = firstHalf.reduce((acc, e) => acc + e.summary.mentalWellnessScore, 0) / (firstHalf.length || 1);
-        const avgSecond = secondHalf.reduce((acc, e) => acc + e.summary.mentalWellnessScore, 0) / (secondHalf.length || 1);
+        // FIX: Explicitly convert `mentalWellnessScore` to a number to prevent type errors during the arithmetic operation.
+        const avgFirst = firstHalf.reduce((acc, e) => acc + Number(e.summary.mentalWellnessScore), 0) / (firstHalf.length || 1);
+        const avgSecond = secondHalf.reduce((acc, e) => acc + Number(e.summary.mentalWellnessScore), 0) / (secondHalf.length || 1);
         if (avgSecond > avgFirst) return 1; // Positive trend
         if (avgSecond < avgFirst) return -1; // Negative trend
         return 0;
@@ -246,58 +253,104 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
 
 
             {filteredEntries.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-slate-800/50 rounded-lg p-4 flex flex-col items-center justify-center">
-                        <WellnessGauge score={avgWellness} />
-                    </div>
-                    
-                    <div className="bg-slate-800/50 rounded-lg p-4 flex flex-col">
-                        <h2 className="font-semibold text-slate-300 mb-3 flex items-center gap-2"><BodyAnatomyIcon className="w-5 h-5 text-cyan-400" />Digestive Health</h2>
-                        <div className="flex-grow grid grid-cols-2 gap-4 text-center">
-                            <div>
-                                <p className={`text-3xl font-bold ${digestiveHealthStats.reportedBloodCount > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                    {digestiveHealthStats.reportedBloodCount}
-                                </p>
-                                <p className="text-xs text-slate-400">Days with Blood Reported</p>
-                            </div>
-                            <div>
-                                <p className={`text-3xl font-bold ${digestiveHealthStats.highCrampsDays > 2 ? 'text-yellow-400' : 'text-green-400'}`}>
-                                    {digestiveHealthStats.highCrampsDays}
-                                </p>
-                                <p className="text-xs text-slate-400">High Cramp Days</p>
-                            </div>
-                            <div className="col-span-2 text-sm text-slate-500 pt-2 mt-2 border-t border-slate-700/50">
-                                {digestiveHealthStats.totalPhotos > 0 
-                                    ? `${digestiveHealthStats.totalPhotos} photos analyzed, ${digestiveHealthStats.redFlagCount} with AI concerns.`
-                                    : `Attach photos to entries for AI analysis.`
-                                }
+                 <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-slate-800/50 rounded-lg p-4 flex flex-col items-center justify-center">
+                            <WellnessGauge score={avgWellness} />
+                        </div>
+                        <div className="bg-slate-800/50 rounded-lg p-4 flex flex-col">
+                            <h2 className="font-semibold text-slate-300 mb-3 flex items-center gap-2"><BodyAnatomyIcon className="w-5 h-5 text-cyan-400" />Digestive Health</h2>
+                            <div className="flex-grow grid grid-cols-2 gap-4 text-center">
+                                <div>
+                                    <p className={`text-3xl font-bold ${digestiveHealthStats.reportedBloodCount > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                        {digestiveHealthStats.reportedBloodCount}
+                                    </p>
+                                    <p className="text-xs text-slate-400">Days with Blood Reported</p>
+                                </div>
+                                <div>
+                                    <p className={`text-3xl font-bold ${digestiveHealthStats.highCrampsDays > 2 ? 'text-yellow-400' : 'text-green-400'}`}>
+                                        {digestiveHealthStats.highCrampsDays}
+                                    </p>
+                                    <p className="text-xs text-slate-400">High Cramp Days</p>
+                                </div>
+                                <div className="col-span-2 text-sm text-slate-500 pt-2 mt-2 border-t border-slate-700/50">
+                                    {digestiveHealthStats.totalPhotos > 0 
+                                        ? `${digestiveHealthStats.totalPhotos} photos analyzed, ${digestiveHealthStats.redFlagCount} with AI concerns.`
+                                        : `Attach photos to entries for AI analysis.`
+                                    }
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <div onClick={onNavigateToMenuScanner} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1">
-                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><MenuScannerIcon className="w-5 h-5 text-cyan-400" />AI Menu Scanner</h2>
-                        <p className="text-slate-400 text-sm">Scan restaurant menus to see which options are safe for you.</p>
-                         <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">Open Scanner &rarr;</p>
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-fr">
+                        <DashboardCard
+                            onClick={onNavigateToMenuScanner}
+                            icon={<MenuScannerIcon className="w-5 h-5 text-cyan-400" />}
+                            title="AI Menu Scanner"
+                            footerText="Open Scanner &rarr;"
+                        >
+                            <p>Scan restaurant menus to see which options are safe for you.</p>
+                        </DashboardCard>
 
-                    <div onClick={onNavigateToIngredientScanner} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors col-span-1">
-                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><IngredientScannerIcon className="w-5 h-5 text-cyan-400" />Ingredient Scanner</h2>
-                        <p className="text-slate-400 text-sm">Scan product labels to analyze ingredients for potential triggers.</p>
-                         <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">Open Scanner &rarr;</p>
-                    </div>
+                        <DashboardCard
+                            onClick={onNavigateToIngredientScanner}
+                            icon={<IngredientScannerIcon className="w-5 h-5 text-cyan-400" />}
+                            title="Ingredient Scanner"
+                            footerText="Open Scanner &rarr;"
+                        >
+                            <p>Scan product labels to analyze ingredients for potential triggers.</p>
+                        </DashboardCard>
+                        
+                        <DashboardCard
+                            onClick={onNavigateToDiet}
+                            icon={<DietIcon className="w-5 h-5 text-cyan-400" />}
+                            title="Dietary Insights"
+                            footerText={dietInsightPreview.hasEnoughData ? "View Full Report \u2192" : undefined}
+                        >
+                            {dietInsightPreview.hasEnoughData ? (
+                                <div className="space-y-2 text-sm">
+                                    <div>
+                                        <p className="text-xs text-slate-500 mb-1">Top Safe Food</p>
+                                        {dietInsightPreview.topSafeFood ? (
+                                            <span className="bg-green-500/20 text-green-300 px-2 py-1 rounded capitalize font-medium">{dietInsightPreview.topSafeFood.name}</span>
+                                        ) : (<p className="text-slate-400 text-xs italic">Not enough data</p>)}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 mb-1">Top Potential Trigger</p>
+                                        {dietInsightPreview.topTriggerFood ? (
+                                            <span className="bg-red-500/20 text-red-300 px-2 py-1 rounded capitalize font-medium">{dietInsightPreview.topTriggerFood.name}</span>
+                                        ) : (<p className="text-slate-400 text-xs italic">No triggers found yet</p>)}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p>Log at least 3 entries with food details to see your top safe foods and potential triggers.</p>
+                            )}
+                        </DashboardCard>
+                        
+                        <DashboardCard
+                            onClick={onNavigateToTrendAnalysis}
+                            icon={<CrystalBallIcon className="w-5 h-5 text-cyan-400" />}
+                            title="Trend Analysis"
+                            footerText="View Analysis &rarr;"
+                        >
+                            <p>Get AI-powered insights on your flare-up risk and wellness trends.</p>
+                        </DashboardCard>
+                        
+                         <DashboardCard
+                            onClick={onNavigateToReportGenerator}
+                            icon={<DocumentReportIcon className="w-5 h-5 text-cyan-400" />}
+                            title="Generate Report"
+                            footerText="Create Report &rarr;"
+                        >
+                            <p>Create a shareable wellness summary for yourself or your doctor.</p>
+                        </DashboardCard>
 
-                    <DietInsightCard journalEntries={journalEntries} onClick={onNavigateToDiet} />
-                    
-                    <div onClick={onNavigateToTrendAnalysis} className="bg-slate-800/50 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors">
-                        <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><CrystalBallIcon className="w-5 h-5 text-cyan-400" />Trend Analysis</h2>
-                        <p className="text-slate-400 text-sm">Get AI-powered insights on your flare-up risk and wellness trends.</p>
-                         <p className="text-right text-xs text-cyan-400 mt-2 font-semibold">View Analysis &rarr;</p>
-                    </div>
-
-                    <div className="bg-slate-800/50 rounded-lg p-4 md:col-span-2">
-                         <h2 className="font-semibold text-slate-300 mb-2 flex items-center gap-2"><ResearchIcon className="w-5 h-5 text-cyan-400" />Research Contribution</h2>
-                         <p className="text-slate-400 text-sm">You've logged <span className="font-bold text-white">{journalEntries.length}</span> entries! Your anonymized data helps train our AI to be more accurate for everyone.</p>
+                        <DashboardCard
+                            icon={<ResearchIcon className="w-5 h-5 text-cyan-400" />}
+                            title="Research Contribution"
+                        >
+                            <p>You've logged <span className="font-bold text-white">{journalEntries.length}</span> entries! Your anonymized data helps train our AI to be more accurate for everyone.</p>
+                        </DashboardCard>
                     </div>
                 </div>
             ) : (

@@ -6,6 +6,7 @@ import JournalView from './components/JournalView';
 import DietScreen from './components/DietScreen';
 import TrendAnalysisScreen from './components/TrendAnalysisScreen';
 import IngredientScannerScreen from './components/IngredientScannerScreen';
+import ReportGeneratorScreen from './components/ReportGeneratorScreen';
 import { AppScreen, NewEntryState, JournalEntry, JournalSummary, ImageAnalysisResult, UserDietaryProfile, MenuAnalysisResult, MenuItemAnalysis } from './types';
 import { generateSummary, analyzeStoolImage, analyzeMenu } from './services/geminiService';
 import { DashboardIcon, JournalIcon, PlusIcon, ArrowLeftIcon, XIcon, ArrowDownIcon } from './components/icons';
@@ -370,6 +371,7 @@ function App() {
                         onNavigateToTrendAnalysis={() => setActiveScreen(AppScreen.TREND_ANALYSIS)}
                         onNavigateToMenuScanner={() => setActiveScreen(AppScreen.MENU_SCANNER)}
                         onNavigateToIngredientScanner={() => setActiveScreen(AppScreen.INGREDIENT_SCANNER)}
+                        onNavigateToReportGenerator={() => setActiveScreen(AppScreen.REPORT_GENERATOR)}
                     />;
         case AppScreen.JOURNAL_VIEW:
             return <JournalView journalEntries={journalEntries} onAttachImage={handleAttachImageToEntry} />;
@@ -381,6 +383,8 @@ function App() {
             return <MenuScannerScreen userProfile={MOCK_USER_DIET_PROFILE} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
         case AppScreen.INGREDIENT_SCANNER:
             return <IngredientScannerScreen userProfile={MOCK_USER_DIET_PROFILE} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
+        case AppScreen.REPORT_GENERATOR:
+            return <ReportGeneratorScreen journalEntries={journalEntries} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
         default:
             return <DashboardScreen 
                         journalEntries={journalEntries} 
@@ -388,6 +392,7 @@ function App() {
                         onNavigateToTrendAnalysis={() => setActiveScreen(AppScreen.TREND_ANALYSIS)}
                         onNavigateToMenuScanner={() => setActiveScreen(AppScreen.MENU_SCANNER)}
                         onNavigateToIngredientScanner={() => setActiveScreen(AppScreen.INGREDIENT_SCANNER)}
+                        onNavigateToReportGenerator={() => setActiveScreen(AppScreen.REPORT_GENERATOR)}
                     />;
     }
   }

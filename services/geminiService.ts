@@ -311,9 +311,9 @@ export async function analyzeMenu(base64Image: string, profile: UserDietaryProfi
 
         **CRITICAL INSTRUCTIONS - FOLLOW THIS PROCESS EXACTLY:**
 
-        1.  **IMAGE QUALITY CHECK (CRITICAL):** Your first step is to assess the image quality. The user's safety depends on this.
-            *   **If the text is SEVERELY OBSCURED** (e.g., extremely blurry, heavy glare, too dark) to the point where you cannot be confident about most of the words, you MUST return an error. Do not guess. The error JSON should be: \`{"items": [], "error": "could not scan image properly try making it more in focus or take out of harsh lighting"}\`.
-            *   **If the text is CHALLENGING BUT LARGELY LEGIBLE** (e.g., slightly out of focus, minor glare), make your best effort to analyze it. Prioritize accuracy over completeness. If you are not confident about a specific item, it is better to omit it than to guess incorrectly. If you are reasonably confident, proceed. Do NOT include the 'error' key in this case.
+        1.  **IMAGE QUALITY CHECK (CRITICAL):** Your first step is to assess the image quality. Make your absolute best effort to analyze the menu even if the image is not perfect (e.g., slightly blurry, minor glare, challenging lighting).
+            *   **Prioritize Analysis:** If you can confidently identify at least a few menu items, proceed with the analysis. Omit any items you are unsure about rather than guessing.
+            *   **Error Handling:** Only if the image is **so blurry, dark, or obscured that you cannot confidently read ANY menu items**, should you return an error. In that specific case, return this JSON: \`{"items": [], "error": "The image is unreadable. Please provide a clearer picture with better lighting."}\`. In all other cases, analyze what you can and do NOT include the 'error' key.
 
         2.  **MENTAL SCAN**: First, visually scan the entire image to identify logical text blocks that represent individual menu items. A "menu item" includes its name AND its description, which might span multiple lines.
 
@@ -406,9 +406,9 @@ export async function analyzeIngredients(base64Image: string, profile: UserDieta
 
         **CRITICAL INSTRUCTIONS:**
 
-        1.  **IMAGE QUALITY CHECK (CRITICAL):** Your first step is to assess the image quality. User safety is paramount.
-            *   **If the ingredients list is SEVERELY OBSCURED** (e.g., extremely blurry, heavy glare, unreadably small) where you cannot confidently identify the majority of ingredients, you MUST return an error. Do not guess. The error JSON should be: \`{"ingredients": [], "error": "could not scan image properly try making it more in focus or take out of harsh lighting"}\`.
-            *   **If the text is CHALLENGING BUT LARGELY LEGIBLE** (e.g., slightly out of focus, minor glare), make your best effort to perform OCR and analysis. Accuracy is more important than identifying every single word. If you cannot confidently read an ingredient, it is better to omit it than to guess. If you are reasonably confident, proceed. Do NOT include the 'error' key in this case.
+        1.  **IMAGE QUALITY CHECK (CRITICAL):** Your first step is to assess image quality. Your goal is to extract information whenever possible, even if the image is imperfect.
+            *   **Prioritize Analysis:** Make your best attempt to read the ingredients list even if the image quality is not perfect (e.g., slightly blurry, minor glare). If you can read at least a few ingredients, proceed with the analysis for those. If you cannot read any ingredients but the image is not completely blank or obscured, return an empty ingredients array without an error.
+            *   **Error Handling:** Only if the image is **so blurry, dark, or obscured that no text is legible at all**, you MUST return the following JSON: \`{"ingredients": [], "error": "The image is unreadable. Please provide a clearer picture."}\`. Otherwise, do your best with what you can see and do NOT include the 'error' key.
 
         2.  **OCR and Extraction**: The text will be small. Perform high-accuracy OCR to read the ingredients list. Ingredients are typically listed after a keyword like "Ingredients:". Extract every single ingredient from this list. Be meticulous in parsing comma-separated items and items within parentheses.
 
@@ -445,5 +445,51 @@ export async function analyzeIngredients(base64Image: string, profile: UserDieta
             throw error;
         }
         throw new Error('An unexpected error occurred during ingredient analysis.');
+    }
+}
+
+const reportSummarySchema = {
+    type: Type.OBJECT,
+    properties: {
+        title: { 
+            type: Type.STRING,
+            description: 'A concise, engaging title for the wellness report based on the timeframe and overall trend. E.g., "Weekly Wellness Uptick" or "Monthly Symptom Review".'
+        },
+        summary: {
+            type: Type.STRING,
+            description: 'A 2-3 sentence summary of the user\'s overall wellness. The tone should be objective but supportive. Mention key trends in symptoms, mood, and flare-up risk. This will be part of a report for the user or their doctor.'
+        }
+    },
+    required: ['title', 'summary']
+};
+
+export async function generateReportSummary(entries: JournalSummary[], timeframeDays: number): Promise<{ title: string; summary: string }> {
+    const prompt = `
+        You are a health assistant AI. Based on the following journal data for the last ${timeframeDays} days, generate a JSON object containing a report title and a 2-3 sentence summary.
+
+        - **Title**: Create a concise, engaging title for the report. Examples: "7-Day Wellness Review", "Weekly Health Snapshot", "Monthly Wellness Improvement".
+        - **Summary**: Write a 2-3 sentence summary of the user's overall wellness. The tone should be objective but supportive, suitable for sharing with a doctor. Mention key trends in symptoms (e.g., "decreased stomach pain"), mood (e.g., "improved mood"), and flare-up risk.
+
+        DATA:
+        ${JSON.stringify(entries, null, 2)}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: reportSummarySchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as { title: string; summary: string };
+    } catch (error) {
+        console.error('Error generating report summary:', error);
+        return {
+            title: `Wellness Report`,
+            summary: "Could not generate an AI summary for this period. The report below contains your key metrics."
+        };
     }
 }
