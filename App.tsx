@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import NewEntryScreen from './components/VoiceInputScreen';
 import SummaryScreen from './components/SummaryScreen';
@@ -7,6 +8,8 @@ import DietScreen from './components/DietScreen';
 import TrendAnalysisScreen from './components/TrendAnalysisScreen';
 import IngredientScannerScreen from './components/IngredientScannerScreen';
 import ReportGeneratorScreen from './components/ReportGeneratorScreen';
+import CredentialScreen from './components/CredentialScreen';
+import VerificationPage from './components/VerificationPage';
 import { AppScreen, NewEntryState, JournalEntry, JournalSummary, ImageAnalysisResult, UserDietaryProfile, MenuAnalysisResult, MenuItemAnalysis } from './types';
 import { generateSummary, analyzeStoolImage, analyzeMenu } from './services/geminiService';
 import { DashboardIcon, JournalIcon, PlusIcon, ArrowLeftIcon, XIcon, ArrowDownIcon } from './components/icons';
@@ -372,6 +375,7 @@ function App() {
                         onNavigateToMenuScanner={() => setActiveScreen(AppScreen.MENU_SCANNER)}
                         onNavigateToIngredientScanner={() => setActiveScreen(AppScreen.INGREDIENT_SCANNER)}
                         onNavigateToReportGenerator={() => setActiveScreen(AppScreen.REPORT_GENERATOR)}
+                        onNavigateToCredential={() => setActiveScreen(AppScreen.CREDENTIAL)}
                     />;
         case AppScreen.JOURNAL_VIEW:
             return <JournalView journalEntries={journalEntries} onAttachImage={handleAttachImageToEntry} />;
@@ -385,6 +389,10 @@ function App() {
             return <IngredientScannerScreen userProfile={MOCK_USER_DIET_PROFILE} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
         case AppScreen.REPORT_GENERATOR:
             return <ReportGeneratorScreen journalEntries={journalEntries} onBack={() => setActiveScreen(AppScreen.DASHBOARD)} />;
+        case AppScreen.CREDENTIAL:
+            return <CredentialScreen onBack={() => setActiveScreen(AppScreen.DASHBOARD)} onShowVerification={() => setActiveScreen(AppScreen.VERIFICATION)} />;
+        case AppScreen.VERIFICATION:
+            return <VerificationPage onClose={() => setActiveScreen(AppScreen.CREDENTIAL)} />;
         default:
             return <DashboardScreen 
                         journalEntries={journalEntries} 
@@ -393,6 +401,7 @@ function App() {
                         onNavigateToMenuScanner={() => setActiveScreen(AppScreen.MENU_SCANNER)}
                         onNavigateToIngredientScanner={() => setActiveScreen(AppScreen.INGREDIENT_SCANNER)}
                         onNavigateToReportGenerator={() => setActiveScreen(AppScreen.REPORT_GENERATOR)}
+                        onNavigateToCredential={() => setActiveScreen(AppScreen.CREDENTIAL)}
                     />;
     }
   }

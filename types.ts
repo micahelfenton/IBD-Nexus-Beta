@@ -1,3 +1,4 @@
+
 // FIX: Removed circular dependency import.
 export enum AppScreen {
   DASHBOARD,
@@ -7,6 +8,8 @@ export enum AppScreen {
   MENU_SCANNER,
   INGREDIENT_SCANNER,
   REPORT_GENERATOR,
+  CREDENTIAL,
+  VERIFICATION,
 }
 
 export interface UserDietaryProfile {

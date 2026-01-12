@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 // FIX: Populating the icons file with SVG icon components as required by other components.
@@ -168,7 +169,7 @@ export const ArrowDownIcon: React.FC<IconProps> = (props) => (
 );
 
 export const SpeakingHeadIcon: React.FC<IconProps> = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" {...props}>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" {...props}>
         {/* Microphone */}
         <rect x="10" y="3" width="4" height="8" rx="2" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 11v5M10 16h4" />
@@ -215,4 +216,16 @@ export const ShareIcon: React.FC<IconProps> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.195.025.39.044.586.06.336.034.672.067 1.006.099m-1.592 2.027c.135.02.273.032.414.043.44.032.883.063 1.326.093m-1.74 2.012a5.25 5.25 0 01-1.286-1.033M11.25 4.5A5.25 5.25 0 0116.5 9.75m0 0a5.25 5.25 0 01-5.25 5.25m5.25-5.25v-2.25m0 2.25a5.25 5.25 0 005.25 5.25m-5.25-5.25c-.195-.025-.39-.044-.586-.06a21.745 21.745 0 00-1.006-.1M16.5 9.75c.195.025.39.044.586.06.336.034.672.067 1.006.099m-1.592-2.027c.135-.02.273-.032.414-.043.44-.032.883-.063 1.326-.093m-1.74-2.012a5.25 5.25 0 011.286 1.033M4.5 12a5.25 5.25 0 005.25 5.25m5.25-5.25a5.25 5.25 0 00-5.25 5.25m0-5.25a5.25 5.25 0 00-5.25-5.25m5.25 5.25c-.195-.025-.39-.044-.586-.06a21.745 21.745 0 00-1.006-.1m-4.214-2.262a5.25 5.25 0 011.286-1.033" />
     </svg>
+);
+
+export const ShieldCheckIcon: React.FC<IconProps> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751A11.959 11.959 0 0112 2.714z" />
+  </svg>
+);
+
+export const IdentificationIcon: React.FC<IconProps> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" />
+  </svg>
 );

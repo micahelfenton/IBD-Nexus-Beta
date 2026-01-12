@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { JournalEntry } from '../types';
-import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon, FireIcon, DocumentReportIcon } from './icons';
+import { BodyAnatomyIcon, CrystalBallIcon, ResearchIcon, DietIcon, MenuScannerIcon, IngredientScannerIcon, FireIcon, DocumentReportIcon, ShieldCheckIcon } from './icons';
 
 interface DashboardScreenProps {
   journalEntries: JournalEntry[];
@@ -9,6 +10,7 @@ interface DashboardScreenProps {
   onNavigateToMenuScanner: () => void;
   onNavigateToIngredientScanner: () => void;
   onNavigateToReportGenerator: () => void;
+  onNavigateToCredential: () => void;
 }
 
 interface FoodStat {
@@ -94,7 +96,7 @@ const WellnessGauge: React.FC<{ score: number }> = ({ score }) => {
     );
 };
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner, onNavigateToIngredientScanner, onNavigateToReportGenerator }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNavigateToDiet, onNavigateToTrendAnalysis, onNavigateToMenuScanner, onNavigateToIngredientScanner, onNavigateToReportGenerator, onNavigateToCredential }) => {
     const [timePeriod, setTimePeriod] = useState<'7d' | '30d'>('7d');
 
     const dietInsightPreview = useMemo(() => {
@@ -105,8 +107,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         if (entriesWithFood.length < MINIMUM_ENTRIES) return { topSafeFood: null, topTriggerFood: null, hasEnoughData: false };
 
         entriesWithFood.forEach(entry => {
-            // FIX: Since flareUpRisk is a required number, the nullish coalescing operator is unnecessary.
-            const isBadDay = (entry.summary.flareUpRisk) > 50 || entry.summary.bloodInStool === true || (entry.summary.crampsSeverity ?? 0) >= 5 || entry.summary.stoolType === 'Diarrhea' || entry.summary.physicalSymptoms.some(s => /pain|cramp|bloat|nausea|diarrhea/i.test(s));
+            // FIX: Ensure values are treated as numbers during comparison to avoid type mismatches.
+            const flareRisk = Number(entry.summary.flareUpRisk);
+            const crampsSev = Number(entry.summary.crampsSeverity ?? 0);
+            const isBadDay = flareRisk > 50 || entry.summary.bloodInStool === true || crampsSev >= 5 || entry.summary.stoolType === 'Diarrhea' || entry.summary.physicalSymptoms.some(s => /pain|cramp|bloat|nausea|diarrhea/i.test(s));
+            
             entry.summary.foodEaten.forEach(foodItem => {
                 const normalizedFood = foodItem.toLowerCase().trim();
                 if (!normalizedFood) return;
@@ -121,17 +126,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         const MINIMUM_OCCURRENCES = 2;
 
         Object.entries(foodStats).forEach(([name, stats]) => {
-            // FIX: Cast stats to `any` and convert to Number to handle cases where the value might be a string (e.g., from localStorage) or unknown.
-            const statsAny = stats as any;
-            if (Number(statsAny.total) < MINIMUM_OCCURRENCES) return;
-            const goodRatio = Number(statsAny.goodDays) / Number(statsAny.total);
+            // FIX: Using Number() to safely handle cases where stored data might be typed incorrectly during runtime.
+            const total = Number(stats.total);
+            if (total < MINIMUM_OCCURRENCES) return;
+            const goodRatio = Number(stats.goodDays) / total;
             let status: 'safe' | 'caution' | 'trigger' = goodRatio >= 0.8 ? 'safe' : (goodRatio >= 0.4 ? 'caution' : 'trigger');
-            categorizedFoods[status].push({ name, ...statsAny, status });
+            categorizedFoods[status].push({ name, ...stats, total, status });
         });
         
-        // FIX: Explicitly convert sort properties to numbers to prevent type errors during arithmetic operations.
-        categorizedFoods.safe.sort((a,b) => Number(b.total) - Number(a.total));
-        categorizedFoods.trigger.sort((a,b) => Number(b.total) - Number(a.total));
+        // FIX: Explicitly cast parameters to FoodStat to ensure numeric access for arithmetic operations.
+        categorizedFoods.safe.sort((a: FoodStat, b: FoodStat) => b.total - a.total);
+        categorizedFoods.trigger.sort((a: FoodStat, b: FoodStat) => b.total - a.total);
 
         return { topSafeFood: categorizedFoods.safe[0] ?? null, topTriggerFood: categorizedFoods.trigger[0] ?? null, hasEnoughData: true };
     }, [journalEntries]);
@@ -144,22 +149,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
             return Math.floor(startOfDay.getTime() / (1000 * 60 * 60 * 24));
         };
 
-        const entryDayNumbers = new Set(
+        // FIX: Explicitly specify the Set generic type to ensure inference flows correctly through Array.from.
+        const entryDayNumbers = new Set<number>(
             journalEntries.map(entry => getDayNumber(new Date(entry.date)))
         );
 
-        const sortedDayNumbers = Array.from(entryDayNumbers).sort((a, b) => b - a);
+        // FIX: Provide explicit number types for the sort callback to satisfy strict arithmetic checks.
+        const sortedDayNumbers = Array.from(entryDayNumbers).sort((a: number, b: number) => b - a);
 
         const todayDayNumber = getDayNumber(new Date());
         
-        // Check if the most recent entry is today or yesterday
-        if (sortedDayNumbers[0] < todayDayNumber - 1) {
+        // FIX: Added a null check for sortedDayNumbers[0] to prevent comparing undefined with a number.
+        const latestEntryDay = sortedDayNumbers[0];
+        if (latestEntryDay === undefined || latestEntryDay < todayDayNumber - 1) {
             return 0; // Streak is broken
         }
 
         let currentStreak = 0;
-        // Start checking from the most recent entry day.
-        let expectedDayNumber = sortedDayNumbers[0];
+        let expectedDayNumber = latestEntryDay;
 
         for (const dayNumber of sortedDayNumbers) {
             if (dayNumber === expectedDayNumber) {
@@ -182,13 +189,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
 
     const avgWellness = useMemo(() => {
         if (filteredEntries.length === 0) return 0;
-        const total = filteredEntries.reduce((acc, entry) => acc + entry.summary.mentalWellnessScore, 0);
+        const total = filteredEntries.reduce((acc, entry) => acc + Number(entry.summary.mentalWellnessScore), 0);
         return total / filteredEntries.length;
     }, [filteredEntries]);
 
     const avgRisk = useMemo(() => {
         if (filteredEntries.length === 0) return 0;
-        const total = filteredEntries.reduce((acc, entry) => acc + entry.summary.flareUpRisk, 0);
+        const total = filteredEntries.reduce((acc, entry) => acc + Number(entry.summary.flareUpRisk), 0);
         return total / filteredEntries.length;
     }, [filteredEntries]);
 
@@ -203,7 +210,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         const sorted = [...filteredEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const firstHalf = sorted.slice(0, Math.floor(sorted.length / 2));
         const secondHalf = sorted.slice(Math.floor(sorted.length / 2));
-        // FIX: Explicitly convert `mentalWellnessScore` to a number to prevent type errors during the arithmetic operation.
+        
+        // FIX: Using Number() to ensure arithmetic operations are performed on valid primitives.
         const avgFirst = firstHalf.reduce((acc, e) => acc + Number(e.summary.mentalWellnessScore), 0) / (firstHalf.length || 1);
         const avgSecond = secondHalf.reduce((acc, e) => acc + Number(e.summary.mentalWellnessScore), 0) / (secondHalf.length || 1);
         if (avgSecond > avgFirst) return 1; // Positive trend
@@ -213,9 +221,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
 
     const digestiveHealthStats = useMemo(() => {
         const entriesWithPhotos = filteredEntries.filter(e => e.imageUrl && e.imageAnalysis);
-        const entriesWithRedFlags = entriesWithPhotos.filter(e => e.imageAnalysis!.redDetections.length > 0);
+        const entriesWithRedFlags = entriesWithPhotos.filter(e => {
+            const analysis = e.imageAnalysis;
+            return analysis && analysis.redDetections && analysis.redDetections.length > 0;
+        });
         const entriesWithReportedBlood = filteredEntries.filter(e => e.summary.bloodInStool).length;
-        const highCrampsDays = filteredEntries.filter(e => (e.summary.crampsSeverity ?? 0) >= 7).length;
+        const highCrampsDays = filteredEntries.filter(e => Number(e.summary.crampsSeverity ?? 0) >= 7).length;
         return {
             totalPhotos: entriesWithPhotos.length,
             redFlagCount: entriesWithRedFlags.length,
@@ -254,6 +265,25 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
 
             {filteredEntries.length > 0 ? (
                  <div className="space-y-4">
+                    {/* Featured Credential Card */}
+                    <div 
+                      onClick={onNavigateToCredential}
+                      className="bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-cyan-500/50 transition-all shadow-lg group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="bg-cyan-500/20 p-3 rounded-full">
+                          <ShieldCheckIcon className="w-6 h-6 text-cyan-400" />
+                        </div>
+                        <div>
+                          <h2 className="font-bold text-white">Digital Verification</h2>
+                          <p className="text-xs text-slate-400">Hidden Disability Active Status</p>
+                        </div>
+                      </div>
+                      <div className="bg-green-500/20 text-green-400 text-[10px] font-bold px-3 py-1 rounded-full border border-green-500/30 group-hover:scale-105 transition-transform">
+                        ACTIVE
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-slate-800/50 rounded-lg p-4 flex flex-col items-center justify-center">
                             <WellnessGauge score={avgWellness} />
