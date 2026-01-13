@@ -13,7 +13,7 @@ import VerificationPage from './components/VerificationPage';
 import { AppScreen, NewEntryState, JournalEntry, JournalSummary, ImageAnalysisResult, UserDietaryProfile, MenuAnalysisResult, MenuItemAnalysis } from './types';
 import { generateSummary, analyzeStoolImage, analyzeMenu } from './services/geminiService';
 import { DashboardIcon, JournalIcon, PlusIcon, ArrowLeftIcon, XIcon, ArrowDownIcon } from './components/icons';
-import { sampleJournalEntries } from './sampleData'; // Using sample data
+import { sampleJournalEntries } from './sampleData';
 
 
 // --- AI Menu Scanner Component ---
@@ -240,7 +240,7 @@ function App() {
       return savedEntriesJSON ? JSON.parse(savedEntriesJSON) : sampleJournalEntries;
     } catch (error) {
       console.error("Error loading journal entries from localStorage:", error);
-      return sampleJournalEntries; // Fallback on error
+      return sampleJournalEntries;
     }
   });
   
@@ -281,7 +281,7 @@ function App() {
 
   const handleReturnToInput = () => {
     setNewEntryState(NewEntryState.VOICE_INPUT);
-    setCurrentSummary(null); // Summary will be regenerated
+    setCurrentSummary(null);
   };
   
   const handleSaveJournalEntry = async () => {
@@ -303,7 +303,6 @@ function App() {
       };
       setJournalEntries(prevEntries => [...prevEntries, newEntry]);
 
-      // Reset the flow and go to dashboard
       handleCancelNewEntry();
       setActiveScreen(AppScreen.DASHBOARD);
       setIsSaving(false);
@@ -335,7 +334,6 @@ function App() {
 
 
   const renderContent = () => {
-    // The new entry flow takes precedence over the main screens
     if (newEntryState !== NewEntryState.NONE) {
         switch (newEntryState) {
             case NewEntryState.VOICE_INPUT:
@@ -365,7 +363,6 @@ function App() {
         }
     }
     
-    // Otherwise, show the active screen
     switch (activeScreen) {
         case AppScreen.DASHBOARD:
             return <DashboardScreen 

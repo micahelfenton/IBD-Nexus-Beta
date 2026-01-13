@@ -107,7 +107,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         if (entriesWithFood.length < MINIMUM_ENTRIES) return { topSafeFood: null, topTriggerFood: null, hasEnoughData: false };
 
         entriesWithFood.forEach(entry => {
-            // FIX: Ensure values are treated as numbers during comparison to avoid type mismatches.
             const flareRisk = Number(entry.summary.flareUpRisk);
             const crampsSev = Number(entry.summary.crampsSeverity ?? 0);
             const isBadDay = flareRisk > 50 || entry.summary.bloodInStool === true || crampsSev >= 5 || entry.summary.stoolType === 'Diarrhea' || entry.summary.physicalSymptoms.some(s => /pain|cramp|bloat|nausea|diarrhea/i.test(s));
@@ -126,7 +125,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         const MINIMUM_OCCURRENCES = 2;
 
         Object.entries(foodStats).forEach(([name, stats]) => {
-            // FIX: Using Number() to safely handle cases where stored data might be typed incorrectly during runtime.
             const total = Number(stats.total);
             if (total < MINIMUM_OCCURRENCES) return;
             const goodRatio = Number(stats.goodDays) / total;
@@ -134,7 +132,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
             categorizedFoods[status].push({ name, ...stats, total, status });
         });
         
-        // FIX: Explicitly cast parameters to FoodStat to ensure numeric access for arithmetic operations.
         categorizedFoods.safe.sort((a: FoodStat, b: FoodStat) => b.total - a.total);
         categorizedFoods.trigger.sort((a: FoodStat, b: FoodStat) => b.total - a.total);
 
@@ -149,20 +146,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
             return Math.floor(startOfDay.getTime() / (1000 * 60 * 60 * 24));
         };
 
-        // FIX: Explicitly specify the Set generic type to ensure inference flows correctly through Array.from.
         const entryDayNumbers = new Set<number>(
             journalEntries.map(entry => getDayNumber(new Date(entry.date)))
         );
 
-        // FIX: Provide explicit number types for the sort callback to satisfy strict arithmetic checks.
         const sortedDayNumbers = Array.from(entryDayNumbers).sort((a: number, b: number) => b - a);
 
         const todayDayNumber = getDayNumber(new Date());
         
-        // FIX: Added a null check for sortedDayNumbers[0] to prevent comparing undefined with a number.
         const latestEntryDay = sortedDayNumbers[0];
         if (latestEntryDay === undefined || latestEntryDay < todayDayNumber - 1) {
-            return 0; // Streak is broken
+            return 0;
         }
 
         let currentStreak = 0;
@@ -173,7 +167,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                 currentStreak++;
                 expectedDayNumber--;
             } else {
-                break; // Gap in days, streak is broken
+                break;
             }
         }
 
@@ -205,20 +199,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         return { digestiveColorClass: 'text-sky-400', digestiveGlowClass: 'glow-blue', riskText: 'Low' };
     }, [avgRisk]);
 
-    const wellnessTrend = useMemo(() => {
-        if (filteredEntries.length < 2) return 0; // 0 for stable
-        const sorted = [...filteredEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        const firstHalf = sorted.slice(0, Math.floor(sorted.length / 2));
-        const secondHalf = sorted.slice(Math.floor(sorted.length / 2));
-        
-        // FIX: Using Number() to ensure arithmetic operations are performed on valid primitives.
-        const avgFirst = firstHalf.reduce((acc, e) => acc + Number(e.summary.mentalWellnessScore), 0) / (firstHalf.length || 1);
-        const avgSecond = secondHalf.reduce((acc, e) => acc + Number(e.summary.mentalWellnessScore), 0) / (secondHalf.length || 1);
-        if (avgSecond > avgFirst) return 1; // Positive trend
-        if (avgSecond < avgFirst) return -1; // Negative trend
-        return 0;
-    }, [filteredEntries]);
-
     const digestiveHealthStats = useMemo(() => {
         const entriesWithPhotos = filteredEntries.filter(e => e.imageUrl && e.imageAnalysis);
         const entriesWithRedFlags = entriesWithPhotos.filter(e => {
@@ -239,7 +219,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
         <div className="p-4 sm:p-6 pb-24 text-white overflow-y-auto h-full">
             <header className="mb-4">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-3xl font-bold text-cyan-300">Dashboard</h1>
+                    <div>
+                        <h1 className="text-3xl font-bold text-cyan-300">Dashboard</h1>
+                        <p className="text-slate-400">Personalized overview.</p>
+                    </div>
                     {streak > 0 && (
                         <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-1.5 rounded-full" title={`${streak}-day logging streak!`}>
                             <FireIcon className="w-5 h-5 text-orange-400 glow-yellow" />
@@ -247,7 +230,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                         </div>
                     )}
                 </div>
-                <p className="text-slate-400">Your personalized wellness overview.</p>
             </header>
             
             <div className="flex justify-center my-4">
@@ -265,7 +247,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
 
             {filteredEntries.length > 0 ? (
                  <div className="space-y-4">
-                    {/* Featured Credential Card */}
                     <div 
                       onClick={onNavigateToCredential}
                       className="bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-4 flex items-center justify-between cursor-pointer hover:border-cyan-500/50 transition-all shadow-lg group"
@@ -353,7 +334,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                                     </div>
                                 </div>
                             ) : (
-                                <p>Log at least 3 entries with food details to see your top safe foods and potential triggers.</p>
+                                <p>Log entries with food details to see your triggers.</p>
                             )}
                         </DashboardCard>
                         
@@ -379,7 +360,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ journalEntries, onNav
                             icon={<ResearchIcon className="w-5 h-5 text-cyan-400" />}
                             title="Research Contribution"
                         >
-                            <p>You've logged <span className="font-bold text-white">{journalEntries.length}</span> entries! Your anonymized data helps train our AI to be more accurate for everyone.</p>
+                            <p>You've logged <span className="font-bold text-white">{journalEntries.length}</span> entries! Your data helps train our AI.</p>
                         </DashboardCard>
                     </div>
                 </div>
